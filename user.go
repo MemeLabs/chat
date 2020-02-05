@@ -1,8 +1,10 @@
-//go:generate ffjson user.go
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -10,10 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tideland/golib/redis"
+	jwt "github.com/dgrijalva/jwt-go"
 )
 
-// ffjson: skip
 type userTools struct {
 	nicklookup  map[string]*uidprot
 	nicklock    sync.RWMutex
@@ -39,19 +40,14 @@ const (
 	ISBOT        = 1 << iota
 )
 
-// ffjson: skip
 type uidprot struct {
 	id        Userid
 	protected bool
 }
 
-func initUsers(redisdb int64) {
-	go runRefreshUser(redisdb)
-}
-
 func (ut *userTools) getUseridForNick(nick string) (Userid, bool) {
 	ut.nicklock.RLock()
-	d, ok := ut.nicklookup[strings.ToLower(nick)]
+	d, ok := uidprot{}, false //ut.nicklookup[strings.ToLower(nick)] //TODO reimplement...
 	if !ok {
 		uid, protected := db.getUser(nick)
 		if uid != 0 {
@@ -83,24 +79,13 @@ func (ut *userTools) addUser(u *User, force bool) {
 	ut.nicklookup[lowernick] = &uidprot{u.id, u.isProtected()}
 }
 
-func runRefreshUser(redisdb int64) {
-	setupRedisSubscription("refreshuser", redisdb, func(result *redis.PublishedValue) {
-		user := userfromSession(result.Value.Bytes())
-		namescache.refresh(user)
-		hub.refreshuser <- user.id
-	})
-}
-
-// ----------
-// ffjson: skip
 type Userid int32
 
-// ffjson: skip
 type User struct {
 	id              Userid
 	nick            string
 	features        uint32
-	lastmessage     []byte
+	lastmessage     []byte //TODO remove?
 	lastmessagetime time.Time
 	delayscale      uint8
 	simplified      *SimplifiedUser
@@ -108,29 +93,113 @@ type User struct {
 	sync.RWMutex
 }
 
-type sessionuser struct {
-	Username string   `json:"username"`
-	UserId   string   `json:"userId"`
-	Features []string `json:"features"`
+type UserClaims struct {
+	UserId string `json:"id"` //TODO from rustla2 backend impl
+	jwt.StandardClaims
 }
 
-func userfromSession(m []byte) (u *User) {
-	var su sessionuser
+// TODO
+func parseJwt(cookie string) (*UserClaims, error) {
 
-	err := su.UnmarshalJSON(m)
+	// verify jwt cookie - https://godoc.org/github.com/dgrijalva/jwt-go#example-Parse--Hmac
+	token, err := jwt.ParseWithClaims(cookie, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(JWTSECRET), nil
+	})
 	if err != nil {
-		B("Unable to unmarshal sessionuser string: ", string(m))
-		return
+		return nil, errors.New("Token invalid")
 	}
 
-	uid, err := strconv.ParseInt(su.UserId, 10, 32)
-	if err != nil {
-		return
+	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 	}
+
+	claims, ok := token.Claims.(*UserClaims) //TODO
+
+	if !ok || !token.Valid {
+		return nil, errors.New("Token invalid")
+	}
+
+	return claims, nil
+}
+
+//TODO
+func userFromAPI(uuid string) (username string, err error) {
+
+	// TODO here we trusted signed id in claims json is well-formed uuid...
+
+	//TODO check exp-time as the backend does! (or not?) -- {"id":"uuid","exp":futurts}
+
+	if err != nil {
+		fmt.Println("err1", uuid)
+		return "", err
+	}
+
+	// TODO - get username from api
+	type un struct {
+		Username string `json:"username"`
+	}
+
+	resp, err := http.Get(fmt.Sprintf("%s%s", USERNAMEAPI, uuid))
+	if err != nil {
+		return "", err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("err2", err)
+		return "", err
+	}
+
+	response := un{}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		fmt.Println("err3", err)
+		return "", err
+	}
+
+	D("username parsed:", response)
+	if response.Username == "" {
+		return "", errors.New("User needs to set a username")
+	}
+
+	return response.Username, nil
+}
+
+func userfromCookie(cookie string, ip string) (u *User, err error) {
+
+	// TODO remoteaddr in go contains port - now we use the header that doesnt... TODO standardize...
+	//ip = strings.Split(ip, ":")[0]
+
+	claims, err := parseJwt(cookie)
+	if err != nil {
+		return nil, err
+	}
+
+	username, err := userFromAPI(claims.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	// if user not found, insert new user into db
+
+	// ignoring the error for now
+	db.newUser(claims.UserId, username, ip)
+	//TODO err is expected for non-new users...
+
+	// now get features from db, update stuff - TODO
+
+	features, uid, err := db.getUserInfo(claims.UserId)
+	if err != nil {
+		fmt.Println("err4", err)
+		return nil, err
+	}
+
+	//finally update records...
+	db.updateUser(Userid(uid), username, ip)
 
 	u = &User{
 		id:              Userid(uid),
-		nick:            su.Username,
+		nick:            username,
 		features:        0,
 		lastmessage:     nil,
 		lastmessagetime: time.Time{},
@@ -140,7 +209,8 @@ func userfromSession(m []byte) (u *User) {
 		RWMutex:         sync.RWMutex{},
 	}
 
-	u.setFeatures(su.Features)
+	// init features finally - CASE SENSITIVE. TODO.
+	u.setFeatures(features)
 
 	forceupdate := false
 	if cu := namescache.get(u.id); cu != nil && cu.features == u.features {
@@ -149,7 +219,7 @@ func userfromSession(m []byte) (u *User) {
 
 	u.assembleSimplifiedUser()
 	usertools.addUser(u, forceupdate)
-	return
+	return u, nil
 }
 
 func (u *User) featureGet(bitnum uint32) bool {
@@ -171,7 +241,7 @@ func (u *User) featureCount() (c uint8) {
 
 // isModerator checks if the user can use mod commands
 func (u *User) isModerator() bool {
-	return u.featureGet(ISMODERATOR | ISADMIN | ISBOT)
+	return u.featureGet(ISMODERATOR | ISADMIN)
 }
 
 // isSubscriber checks if the user can speak when the chat is in submode
@@ -204,7 +274,9 @@ func (u *User) setFeatures(features []string) {
 			u.featureSet(ISVIP)
 		case "bot":
 			u.featureSet(ISBOT)
-		default:
+		case "":
+			continue
+		default: //flairNN for future flairs
 			if feature[:5] == "flair" {
 				flair, err := strconv.Atoi(feature[5:])
 				if err != nil {
@@ -264,9 +336,11 @@ func (u *User) assembleSimplifiedUser() {
 	}
 }
 
-// ----------
 func getUserFromWebRequest(r *http.Request) (user *User, banned bool, ip string) {
-	ip = r.Header.Get("X-Real-Ip")
+
+	// TODO make this an option? - need this if run behind e.g. nginx
+	// TODO test
+	ip = r.Header.Get("X-Forwarded-For")
 	if ip == "" {
 		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
@@ -277,34 +351,14 @@ func getUserFromWebRequest(r *http.Request) (user *User, banned bool, ip string)
 		return
 	}
 
-	var authdata []byte
-	// set up the user here from redis if the user has a session cookie
-	sessionid, err := r.Cookie("sid")
-	if err == nil {
-		if !cookievalid.MatchString(sessionid.Value) {
-			return
-		}
-
-		authdata, err = redisGetBytes(fmt.Sprintf("CHAT:session-%v", sessionid.Value))
-		if err != nil || len(authdata) == 0 {
-			return
-		}
-	} else {
-		// try authtoken auth
-		authtoken, err := r.Cookie("authtoken")
-		if err != nil {
-			return
-		}
-
-		authdata, err = api.getUserFromAuthToken(authtoken.Value)
-		if err != nil {
-			D("getUserFromAuthToken error", err)
-			return
-		}
+	jwtcookie, err := r.Cookie(JWTCOOKIENAME)
+	if err != nil {
+		return
 	}
 
-	user = userfromSession(authdata)
-	if user == nil {
+	user, err = userfromCookie(jwtcookie.Value, ip)
+	if err != nil || user == nil {
+		B(err)
 		return
 	}
 
@@ -313,7 +367,6 @@ func getUserFromWebRequest(r *http.Request) (user *User, banned bool, ip string)
 		return
 	}
 
-	cacheIPForUser(user.id, ip)
 	// there is only ever one single "user" struct, the namescache makes sure of that
 	user = namescache.add(user)
 	return

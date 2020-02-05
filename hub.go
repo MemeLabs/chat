@@ -1,11 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"strconv"
 	"time"
-
-	"github.com/tideland/golib/redis"
 )
 
 type Hub struct {
@@ -37,10 +33,6 @@ var hub = Hub{
 	getips:      make(chan useridips),
 	users:       make(map[Userid]*User),
 	refreshuser: make(chan Userid, 4),
-}
-
-func initHub() {
-	go hub.run()
 }
 
 func (hub *Hub) run() {
@@ -80,6 +72,8 @@ func (hub *Hub) run() {
 			}
 			d.c <- ips
 		case message := <-hub.broadcast:
+			// TODO should be channel, could lock up...
+			//TODO save into state in case of restart??
 			if message.event != "JOIN" && message.event != "QUIT" {
 				cacheChatEvent(message)
 			}
@@ -111,6 +105,43 @@ func (hub *Hub) run() {
 	}
 }
 
+// TODO redis replacement
+func cacheChatEvent(msg *message) {
+	if len(MSGCACHE) <= 0 {
+		return
+	}
+
+	MSGLOCK.Lock()
+	defer MSGLOCK.Unlock()
+
+	if len(MSGCACHE) >= MSGCACHESIZE {
+		MSGCACHE = MSGCACHE[1:]
+	}
+
+	data, err := Pack(msg.event, msg.data.([]byte))
+	if err != nil {
+		D("cacheChatEvent pack error", err)
+		return
+	}
+
+	MSGCACHE = append(MSGCACHE, string(data[:]))
+}
+
+// TODO
+func getCache() []string {
+	MSGLOCK.RLock()
+	defer MSGLOCK.RUnlock()
+
+	out := []string{}
+	for _, v := range MSGCACHE {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+
+	return out
+}
+
 func (hub *Hub) getIPsForUserid(userid Userid) []string {
 	c := make(chan []string, 1)
 	hub.getips <- useridips{userid, c}
@@ -134,73 +165,4 @@ func (hub *Hub) toggleSubmode(enabled bool) {
 
 	state.submode = enabled
 	state.save()
-}
-
-func initBroadcast(redisdb int64) {
-	go setupBroadcast(redisdb)
-	go setupPrivmsg(redisdb)
-}
-
-func setupBroadcast(redisdb int64) {
-	setupRedisSubscription("broadcast", redisdb, func(result *redis.PublishedValue) {
-		var bc EventDataIn
-		err := json.Unmarshal(result.Value.Bytes(), &bc)
-		if err != nil {
-			D("unable to unmarshal broadcast message", result.Value.String())
-			return
-		}
-
-		data := &EventDataOut{}
-		data.Timestamp = unixMilliTime()
-		data.Data = bc.Data
-		m, _ := Marshal(data)
-		hub.broadcast <- &message{
-			event: "BROADCAST",
-			data:  m,
-		}
-	})
-}
-
-func setupPrivmsg(redisdb int64) {
-	setupRedisSubscription("privmsg", redisdb, func(result *redis.PublishedValue) {
-		var d struct {
-			Username     string
-			Targetuserid string
-			Message      string
-			Messageid    string
-		}
-
-		err := json.Unmarshal(result.Value.Bytes(), &d)
-		if err != nil {
-			D("unable to unmarshal private message", result.Value.String())
-			return
-		}
-
-		mid, err := strconv.ParseInt(d.Messageid, 10, 64)
-		if err != nil {
-			D("Unable to parse messageid into number", d.Messageid)
-			return
-		}
-
-		uid, err := strconv.ParseInt(d.Targetuserid, 10, 64)
-		if err != nil {
-			D("Unable to parse targetuserid into number", d.Targetuserid)
-			return
-		}
-
-		p := &PrivmsgOut{
-			message: message{
-				event: "PRIVMSG",
-			},
-			Nick:      d.Username,
-			targetuid: Userid(uid),
-			Data:      d.Message,
-			Messageid: mid,
-			Timestamp: unixMilliTime(),
-		}
-
-		p.message.data, _ = Marshal(p)
-
-		hub.privmsg <- p
-	})
 }

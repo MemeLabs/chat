@@ -8,17 +8,18 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	_ "expvar"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	_ "github.com/mkevac/debugcharts"
 	conf "github.com/msbranco/goconfig"
 )
 
@@ -56,6 +57,12 @@ var (
 	debuggingenabled = false
 	DELAY            = 300 * time.Millisecond
 	MAXTHROTTLETIME  = 5 * time.Minute
+	JWTSECRET        = ""
+	JWTCOOKIENAME    = "jwt"
+	USERNAMEAPI      = "http://localhost:8076/api/username/"
+	MSGCACHE         = []string{} //TODO redis replacement...
+	MSGCACHESIZE     = 150
+	MSGLOCK          sync.RWMutex
 )
 
 func main() {
@@ -68,21 +75,13 @@ func main() {
 		nc.AddOption("default", "maxprocesses", "0")
 		nc.AddOption("default", "chatdelay", fmt.Sprintf("%d", 300*time.Millisecond))
 		nc.AddOption("default", "maxthrottletime", fmt.Sprintf("%d", 5*time.Minute))
+		nc.AddOption("default", "dbfile", "chatbackend.sqlite")
+		nc.AddOption("default", "jwtcookiename", "jwt")
+		nc.AddOption("default", "jwtsecret", "")
+		nc.AddOption("default", "usernameapi", "")
+		nc.AddOption("default", "messagecachesize", "150")
 
-		nc.AddSection("redis")
-		nc.AddOption("redis", "address", "localhost:6379")
-		nc.AddOption("redis", "database", "0")
-		nc.AddOption("redis", "password", "")
-
-		nc.AddSection("database")
-		nc.AddOption("database", "type", "mysql")
-		nc.AddOption("database", "dsn", "username:password@tcp(localhost:3306)/destinygg?loc=UTC&parseTime=true&strict=true&timeout=1s&time_zone=\"+00:00\"")
-
-		nc.AddSection("api")
-		nc.AddOption("api", "url", "http://www.destiny.gg/api")
-		nc.AddOption("api", "key", "changeme")
-
-		if err := nc.WriteConfigFile("settings.cfg", 0644, "DestinyChatBackend"); err != nil {
+		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
 		}
 		if c, err = conf.ReadConfigFile("settings.cfg"); err != nil {
@@ -95,17 +94,25 @@ func main() {
 	processes, _ := c.GetInt64("default", "maxprocesses")
 	delay, _ := c.GetInt64("default", "chatdelay")
 	maxthrottletime, _ := c.GetInt64("default", "maxthrottletime")
-	apiurl, _ := c.GetString("api", "url")
-	apikey, _ := c.GetString("api", "key")
+	dbfile, _ := c.GetString("default", "dbfile")
 	DELAY = time.Duration(delay)
 	MAXTHROTTLETIME = time.Duration(maxthrottletime)
+	JWTSECRET, _ = c.GetString("default", "jwtsecret")
+	JWTCOOKIENAME, _ = c.GetString("default", "jwtcookiename")
+	api, _ := c.GetString("default", "usernameapi")
+	msgcachesize, _ := c.GetInt64("default", "messagecachesize")
 
-	redisaddr, _ := c.GetString("redis", "address")
-	redisdb, _ := c.GetInt64("redis", "database")
-	redispw, _ := c.GetString("redis", "password")
-
-	dbtype, _ := c.GetString("database", "type")
-	dbdsn, _ := c.GetString("database", "dsn")
+	if JWTSECRET == "" {
+		JWTSECRET = "PepoThink"
+		fmt.Println("Insecurely using default JWT secret")
+	}
+	if api != "" {
+		USERNAMEAPI = api
+	}
+	if msgcachesize >= 0 {
+		MSGCACHESIZE = int(msgcachesize)
+	}
+	MSGCACHE = make([]string, MSGCACHESIZE)
 
 	if processes <= 0 {
 		processes = int64(runtime.NumCPU())
@@ -113,17 +120,53 @@ func main() {
 	runtime.GOMAXPROCS(int(processes))
 
 	state.load()
+	initDatabase(dbfile)
 
-	initApi(apiurl, apikey)
-	initRedis(redisaddr, redisdb, redispw)
+	go hub.run()
+	go bans.run()
 
-	initNamesCache()
-	initHub()
-	initDatabase(dbtype, dbdsn)
+	//TODO hacked in api for compat
+	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", 405)
+			return
+		}
 
-	initBroadcast(redisdb)
-	initBans(redisdb)
-	initUsers(redisdb)
+		jwtcookie, err := r.Cookie(JWTCOOKIENAME)
+		if err != nil {
+			http.Error(w, "Not logged in", 401)
+			return
+		}
+		claims, err := parseJwt(jwtcookie.Value)
+		if err != nil {
+			http.Error(w, "Not logged in", 401)
+			return
+		}
+		username, err := userFromAPI(claims.UserId)
+		if err != nil {
+			http.Error(w, "Really makes you think", 401)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(fmt.Sprintf(`{"username":"%s", "nick":"%s"}`, username, username)))
+	})
+
+	// TODO cache foo
+	http.HandleFunc("/api/chat/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", 405)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		history, err := json.Marshal(getCache())
+		if err != nil {
+			http.Error(w, "", 500)
+			return
+		}
+		w.Write(history)
+	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
@@ -151,6 +194,15 @@ func main() {
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+func getMaskedIP(s string) string {
+	var ipv6mask = net.CIDRMask(64, 128)
+	ip := net.ParseIP(s)
+	if ip.To4() == nil {
+		return ip.Mask(ipv6mask).String()
+	}
+	return s
 }
 
 func unixMilliTime() int64 {

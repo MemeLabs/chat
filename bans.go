@@ -2,12 +2,8 @@ package main
 
 import (
 	"database/sql"
-	"net"
 	"sync"
 	"time"
-
-	"github.com/go-sql-driver/mysql"
-	"github.com/tideland/golib/redis"
 )
 
 type Bans struct {
@@ -19,8 +15,7 @@ type Bans struct {
 }
 
 var (
-	ipv6mask = net.CIDRMask(64, 128)
-	bans     = Bans{
+	bans = Bans{
 		make(map[Userid]time.Time),
 		sync.RWMutex{},
 		make(map[string]time.Time),
@@ -29,57 +24,14 @@ var (
 	}
 )
 
-func getMaskedIP(s string) string {
-	ip := net.ParseIP(s)
-	if ip.To4() == nil {
-		return ip.Mask(ipv6mask).String()
-	} else {
-		return s
-	}
-}
-
-func initBans(redisdb int64) {
-	go bans.run(redisdb)
-}
-
-func (b *Bans) run(redisdb int64) {
-	b.loadActive()
-
-	go b.runRefresh(redisdb)
-	go b.runUnban(redisdb)
-
+func (b *Bans) run() { //TODO in init? probably need to init the structs here from db on start
 	t := time.NewTicker(time.Minute)
-
-	for {
-		select {
-		case <-t.C:
-			b.clean()
-		}
+	for range t.C {
+		b.clean()
 	}
 }
 
-func (b *Bans) runRefresh(redisdb int64) {
-	setupRedisSubscription("refreshbans", redisdb, func(result *redis.PublishedValue) {
-		D("Refreshing bans")
-		b.loadActive()
-	})
-}
-
-func (b *Bans) runUnban(redisdb int64) {
-	setupRedisSubscription("unbanuserid", redisdb, func(result *redis.PublishedValue) {
-		userid, err := result.Value.Uint64()
-		if err != nil {
-			D("Error parsing message as uint64:", userid, err)
-			return
-		}
-
-		uid := Userid(userid)
-		b.unbanUserid(uid)
-		mutes.unmuteUserid(uid)
-	})
-}
-
-func (b *Bans) clean() {
+func (b *Bans) clean() { //TODO is this used / necessary???
 	b.userlock.Lock()
 	defer b.userlock.Unlock()
 	b.iplock.Lock()
@@ -114,14 +66,13 @@ func (b *Bans) banUser(uid Userid, targetuid Userid, ban *BanIn) {
 	b.log(uid, targetuid, ban, "")
 
 	if ban.BanIP {
-		ips := getIPCacheForUser(targetuid)
+		//ips := getIPCacheForUser(targetuid) //TODO
+		//if len(ips) == 0 {
+		ips := hub.getIPsForUserid(targetuid)
 		if len(ips) == 0 {
-			D("No ips found in cache for user", targetuid)
-			ips = hub.getIPsForUserid(targetuid)
-			if len(ips) == 0 {
-				D("No ips found for user (offline)", targetuid)
-			}
+			D("No ips found for user (offline)", targetuid)
 		}
+		//}
 
 		b.iplock.Lock()
 		defer b.iplock.Unlock()
@@ -131,7 +82,6 @@ func (b *Bans) banUser(uid Userid, targetuid Userid, ban *BanIn) {
 			b.log(uid, targetuid, ban, ip)
 			D("IPBanned user", ban.Nick, targetuid, "with ip:", ip)
 		}
-
 	}
 
 	hub.bans <- targetuid
@@ -202,20 +152,20 @@ func (b *Bans) loadActive() {
 	b.ips = make(map[string]time.Time)
 	b.userips = make(map[Userid][]string)
 
-	db.getBans(func(uid Userid, ipaddress sql.NullString, endtimestamp mysql.NullTime) {
-		if !endtimestamp.Valid {
-			endtimestamp.Time = getFuturetimeUTC()
+	db.getBans(func(uid Userid, ipaddress sql.NullString, endtimestamp time.Time) {
+		if endtimestamp.String() == "" { //TODO check is done before already? clean up...
+			endtimestamp = getFuturetimeUTC()
 		}
 
 		if ipaddress.Valid {
-			b.ips[ipaddress.String] = endtimestamp.Time
+			b.ips[ipaddress.String] = endtimestamp
 			if _, ok := b.userips[uid]; !ok {
 				b.userips[uid] = make([]string, 0, 1)
 			}
 			b.userips[uid] = append(b.userips[uid], ipaddress.String)
 			hub.ipbans <- ipaddress.String
 		} else {
-			b.users[uid] = endtimestamp.Time
+			b.users[uid] = endtimestamp
 		}
 	})
 }

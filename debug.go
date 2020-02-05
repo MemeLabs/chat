@@ -46,6 +46,7 @@ func B(v ...interface{}) {
 	println(ts, NewErrorTrace(v...).Error())
 }
 
+// Unused ...
 func F(v ...interface{}) {
 	ts := time.Now().Format("2006-02-01 15:04:05: ")
 	println(ts, NewErrorTrace(v...).Error())
