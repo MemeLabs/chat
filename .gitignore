@@ -1,6 +1,3 @@
-chat
-settings.cfg
-*.sublime-*
-deploy.sh
-*.pprof
-.state.dc
+*.sqlite
+*.cfg
+chat_backend

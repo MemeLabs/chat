@@ -39,8 +39,8 @@ type Connection struct {
 }
 
 type SimplifiedUser struct {
-	Nick     string    `json:"nick,omitempty"`
-	Features *[]string `json:"features,omitempty"`
+	Nick     string    `json:"nick"`
+	Features *[]string `json:"features"`
 }
 
 type EventDataIn struct {
@@ -285,7 +285,6 @@ func (c *Connection) EmitBlock(event string, data interface{}) {
 		event: event,
 		data:  data,
 	}
-	return
 }
 
 func (c *Connection) Broadcast(event string, data *EventDataOut) {
@@ -460,8 +459,8 @@ func (c *Connection) OnMsg(data []byte) {
 }
 
 func (c *Connection) OnPrivmsg(data []byte) {
-	p := &PrivmsgIn{}
-	if err := Unmarshal(data, p); err != nil {
+	pin := &PrivmsgIn{}
+	if err := Unmarshal(data, pin); err != nil {
 		c.SendError("protocolerror")
 		return
 	}
@@ -471,30 +470,48 @@ func (c *Connection) OnPrivmsg(data []byte) {
 		return
 	}
 
-	msg := strings.TrimSpace(p.Data)
+	msg := pin.Data
 	if !c.canMsg(msg, true) {
 		return
 	}
 
-	uid, _ := usertools.getUseridForNick(p.Nick)
-	if uid == 0 || uid == c.user.id {
+	tuid, _ := usertools.getUseridForNick(pin.Nick)
+	if tuid == 0 || tuid == c.user.id {
 		c.SendError("notfound")
 		return
 	}
 
-	if err := api.sendPrivmsg(c.user.id, uid, msg); err != nil {
-		D("send error from", c.user.nick, err)
-		c.SendError(err.Error())
-	} else {
-		c.EmitBlock("PRIVMSGSENT", "")
+	// TODO check if user is online too
+	c.EmitBlock("PRIVMSGSENT", "")
+
+	// ephemeral private messages
+	// in particular, messages sent to users that are offline will never be delivered
+	// TODO search db instead? -> can tell user that name is right, but just offline.
+
+	pout := &PrivmsgOut{
+		message: message{
+			event: "PRIVMSG",
+		},
+		Nick:      c.user.nick,
+		targetuid: Userid(tuid),
+		Data:      msg,
+		Messageid: 1337, // no saving in db means ids do not matter
+		Timestamp: unixMilliTime(),
 	}
 
+	pout.message.data, _ = Marshal(pout)
+
+	hub.privmsg <- pout
 }
 
 func (c *Connection) Names() {
+	n := namescache.getNames()
+	if string(n) == "" { // handle empty cache on very first connection. TODO: connectioncount?
+		n = []byte("{}")
+	}
 	c.sendmarshalled <- &message{
 		event: "NAMES",
-		data:  namescache.getNames(),
+		data:  n,
 	}
 }
 
@@ -511,6 +528,7 @@ func (c *Connection) OnMute(data []byte) {
 	}
 
 	ok, uid := c.canModerateUser(mute.Data)
+
 	if !ok || uid == 0 {
 		c.SendError("nopermission")
 		return
@@ -597,7 +615,6 @@ func (c *Connection) OnBan(data []byte) {
 	}
 
 	bans.banUser(c.user.id, uid, ban)
-
 	out := c.getEventDataOut()
 	out.Data = ban.Nick
 	out.Targetuserid = uid

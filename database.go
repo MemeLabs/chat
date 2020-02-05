@@ -2,14 +2,16 @@ package main
 
 import (
 	"database/sql"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type database struct {
-	db        *sql.DB
+	db        *sqlx.DB
 	insertban chan *dbInsertBan
 	deleteban chan *dbDeleteBan
 	sync.Mutex
@@ -20,8 +22,8 @@ type dbInsertBan struct {
 	targetuid Userid
 	ipaddress *sql.NullString
 	reason    string
-	starttime time.Time
-	endtime   *mysql.NullTime
+	starttime int64
+	endtime   int64
 	retries   uint8
 }
 
@@ -34,25 +36,11 @@ var db = &database{
 	deleteban: make(chan *dbDeleteBan, 10),
 }
 
-func initDatabase(dbtype string, dbdsn string) {
-	var err error
-	conn, err := sql.Open(dbtype, dbdsn)
-	if err != nil {
-		B("Could not open database: ", err)
-		time.Sleep(time.Second)
-		initDatabase(dbtype, dbdsn)
-		return
-	}
-	err = conn.Ping()
-	if err != nil {
-		B("Could not connect to database: ", err)
-		time.Sleep(time.Second)
-		initDatabase(dbtype, dbdsn)
-		return
-	}
+func initDatabase(dbfile string) {
+	db.db = sqlx.MustConnect("sqlite3", dbfile)
 
-	db.db = conn
-	go db.runInsertBan()
+	bans.loadActive()
+	go db.runInsertBan() //TODO ???
 	go db.runDeleteBan()
 }
 
@@ -71,25 +59,25 @@ func (db *database) getStatement(name string, sql string) *sql.Stmt {
 func (db *database) getInsertBanStatement() *sql.Stmt {
 	return db.getStatement("insertBan", `
 		INSERT INTO bans
-		SET
-			userid         = ?,
-			targetuserid   = ?,
-			ipaddress      = ?,
-			reason         = ?,
-			starttimestamp = ?,
-			endtimestamp   = ?
-	`)
+		VALUES (
+			?,
+			?,
+			?,
+			?,
+			?,
+			?
+	)`)
 }
 
 func (db *database) getDeleteBanStatement() *sql.Stmt {
 	return db.getStatement("deleteBan", `
 		UPDATE bans
-		SET endtimestamp = NOW()
+		SET endtimestamp = strftime('%s', 'now')
 		WHERE
 			targetuserid = ? AND
 			(
 				endtimestamp IS NULL OR
-				endtimestamp > NOW()
+				endtimestamp > strftime('%s', 'now')
 			)
 	`)
 }
@@ -157,13 +145,17 @@ func (db *database) insertBan(uid Userid, targetuid Userid, ban *BanIn, ip strin
 		ipaddress.String = ip
 		ipaddress.Valid = true
 	}
-	starttimestamp := time.Now().UTC()
 
-	endtimestamp := &mysql.NullTime{}
-	if !ban.Ispermanent {
-		endtimestamp.Time = starttimestamp.Add(time.Duration(ban.Duration))
-		endtimestamp.Valid = true
+	starttime := time.Now().UTC()
+	var endtimestamp int64
+
+	if ban.Ispermanent {
+		endtimestamp = getFuturetimeUTC().Unix()
+	} else {
+		endtimestamp = starttime.Add(time.Duration(ban.Duration)).Unix()
 	}
+
+	starttimestamp := starttime.Unix()
 
 	db.insertban <- &dbInsertBan{uid, targetuid, ipaddress, ban.Reason, starttimestamp, endtimestamp, 0}
 }
@@ -172,7 +164,7 @@ func (db *database) deleteBan(targetuid Userid) {
 	db.deleteban <- &dbDeleteBan{targetuid}
 }
 
-func (db *database) getBans(f func(Userid, sql.NullString, mysql.NullTime)) {
+func (db *database) getBans(f func(Userid, sql.NullString, time.Time)) {
 	db.Lock()
 	defer db.Unlock()
 
@@ -184,7 +176,7 @@ func (db *database) getBans(f func(Userid, sql.NullString, mysql.NullTime)) {
 		FROM bans
 		WHERE
 			endtimestamp IS NULL OR
-			endtimestamp > NOW()
+			endtimestamp > strftime('%s', 'now')
 		GROUP BY targetuserid, ipaddress
 	`)
 
@@ -197,13 +189,15 @@ func (db *database) getBans(f func(Userid, sql.NullString, mysql.NullTime)) {
 	for rows.Next() {
 		var uid Userid
 		var ipaddress sql.NullString
-		var endtimestamp mysql.NullTime
-		err = rows.Scan(&uid, &ipaddress, &endtimestamp)
-
+		var endtimestamp time.Time
+		var t int64
+		err = rows.Scan(&uid, &ipaddress, &t)
 		if err != nil {
 			D("Unable to scan bans row: ", err)
 			continue
 		}
+
+		endtimestamp = time.Unix(t, 0).UTC()
 
 		f(uid, ipaddress, endtimestamp)
 	}
@@ -213,14 +207,11 @@ func (db *database) getUser(nick string) (Userid, bool) {
 
 	stmt := db.getStatement("getUser", `
 		SELECT
-			u.userId,
-			IF(IFNULL(f.featureId, 0) >= 1, 1, 0) AS protected
-		FROM dfl_users AS u
-		LEFT JOIN dfl_users_features AS f ON (
-			f.userId = u.userId AND
-			featureId = (SELECT featureId FROM dfl_features WHERE featureName IN("protected", "admin") LIMIT 1)
-		)
-		WHERE u.username = ?
+			u.userid,
+			instr(u.features, 'admin') OR
+			instr(u.features, 'protected')
+		FROM users AS u
+		WHERE u.nick = ?
 	`)
 	db.Lock()
 	defer stmt.Close()
@@ -234,4 +225,79 @@ func (db *database) getUser(nick string) (Userid, bool) {
 		return 0, false
 	}
 	return Userid(uid), protected
+}
+
+// TODO ... for uuid-id conversion
+func (db *database) getUserInfo(uuid string) ([]string, int, error) {
+
+	stmt := db.getStatement("getUserInfo", `
+		SELECT
+			userid, features
+		FROM users
+		WHERE uuid = ?
+	`)
+	db.Lock()
+	defer stmt.Close()
+	defer db.Unlock()
+
+	var f string
+	var uid int
+	err := stmt.QueryRow(uuid).Scan(&uid, &f)
+	if err != nil {
+		D("features err", err)
+		return []string{}, -1, err //TODO -1 implications...
+	}
+	features := strings.Split(f, ",") //TODO features are placed into db like this...
+	return features, uid, nil
+}
+
+func (db *database) newUser(uuid string, name string, ip string) error {
+
+	// TODO
+	// chat-internal uid is autoincrement primary key...
+	// UNIQUE check on uuid makes sure of no double intserts.
+	stmt := db.getStatement("newUser", `
+		INSERT INTO users (
+			uuid, nick, features, firstlogin, lastlogin, lastip
+		)
+		VALUES (
+			?, ?, "", strftime('%s', 'now'), strftime('%s', 'now'), ?
+		)
+	`)
+
+	db.Lock()
+	defer stmt.Close()
+	defer db.Unlock()
+
+	_, err := stmt.Exec(uuid, name, ip)
+
+	if err != nil {
+		D("newuser err", err) //TODO this is actually expected and normal for existing users...
+		return err
+	}
+
+	return nil
+}
+
+func (db *database) updateUser(id Userid, name string, ip string) error {
+
+	stmt := db.getStatement("updateUser", `
+		UPDATE users SET 
+			nick = ?,
+			lastlogin = strftime('%s', 'now'),
+			lastip = ?
+		WHERE userid = ?
+	`)
+	db.Lock()
+	defer stmt.Close()
+	defer db.Unlock()
+
+	_, err := stmt.Exec(name, ip, id)
+
+	if err != nil {
+		D("updateUser err", err)
+		return err
+	}
+
+	return nil
 }
