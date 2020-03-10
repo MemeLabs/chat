@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/websocket"
 	conf "github.com/msbranco/goconfig"
 )
@@ -59,7 +60,9 @@ var (
 	MAXTHROTTLETIME  = 5 * time.Minute
 	JWTSECRET        = ""
 	JWTCOOKIENAME    = "jwt"
+	APIUSERID        = ""
 	USERNAMEAPI      = "http://localhost:8076/api/username/"
+	VIEWERSTATEAPI   = "http://localhost:8076/api/admin/viewer-state"
 	MSGCACHE         = []string{} //TODO redis replacement...
 	MSGCACHESIZE     = 150
 	MSGLOCK          sync.RWMutex
@@ -76,9 +79,11 @@ func main() {
 		nc.AddOption("default", "chatdelay", fmt.Sprintf("%d", 300*time.Millisecond))
 		nc.AddOption("default", "maxthrottletime", fmt.Sprintf("%d", 5*time.Minute))
 		nc.AddOption("default", "dbfile", "chatbackend.sqlite")
-		nc.AddOption("default", "jwtcookiename", "jwt")
+		nc.AddOption("default", "jwtcookiename", JWTCOOKIENAME)
 		nc.AddOption("default", "jwtsecret", "")
-		nc.AddOption("default", "usernameapi", "")
+		nc.AddOption("default", "apiuserid", "")
+		nc.AddOption("default", "usernameapi", USERNAMEAPI)
+		nc.AddOption("default", "viewerstateapi", VIEWERSTATEAPI)
 		nc.AddOption("default", "messagecachesize", "150")
 
 		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
@@ -99,15 +104,14 @@ func main() {
 	MAXTHROTTLETIME = time.Duration(maxthrottletime)
 	JWTSECRET, _ = c.GetString("default", "jwtsecret")
 	JWTCOOKIENAME, _ = c.GetString("default", "jwtcookiename")
-	api, _ := c.GetString("default", "usernameapi")
+	APIUSERID, _ = c.GetString("default", "apiuserid")
+	USERNAMEAPI, _ = c.GetString("default", "usernameapi")
+	VIEWERSTATEAPI, _ = c.GetString("default", "viewerstateapi")
 	msgcachesize, _ := c.GetInt64("default", "messagecachesize")
 
 	if JWTSECRET == "" {
 		JWTSECRET = "PepoThink"
 		fmt.Println("Insecurely using default JWT secret")
-	}
-	if api != "" {
-		USERNAMEAPI = api
 	}
 	if msgcachesize >= 0 {
 		MSGCACHESIZE = int(msgcachesize)
@@ -124,6 +128,7 @@ func main() {
 
 	go hub.run()
 	go bans.run()
+	go viewerStates.run()
 
 	//TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +171,19 @@ func main() {
 			return
 		}
 		w.Write(history)
+	})
+
+	// TODO cache foo
+	http.HandleFunc("/api/chat/viewer-states", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", 405)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(viewerStates.DumpChanges()); err != nil {
+			http.Error(w, "[]", 500)
+		}
 	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -260,4 +278,12 @@ func (s *State) save() {
 	if err != nil {
 		D("Error with writing out state file:", err)
 	}
+}
+
+func createAPIJWT(userID string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":  userID,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	return token.SignedString([]byte(JWTSECRET))
 }
