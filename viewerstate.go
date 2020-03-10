@@ -33,7 +33,7 @@ type ViewerStateStore struct {
 // ViewerStateChange state change event emitted when viewer changes channels,
 // comes online or goes offline
 type ViewerStateChange struct {
-	Name    string         `json:"name"`
+	Nick    string         `json:"nick"`
 	Online  bool           `json:"online"`
 	Channel *StreamChannel `json:"channel,omitempty"`
 }
@@ -140,7 +140,7 @@ func (v *ViewerStateStore) updatePublicState(state *ViewerState) {
 		if ok {
 			delete(v.viewerStates, state.UserID)
 			v.emitChange(&ViewerStateChange{
-				Name:   state.Name,
+				Nick:   state.Name,
 				Online: false,
 			})
 		}
@@ -153,7 +153,7 @@ func (v *ViewerStateStore) updatePublicState(state *ViewerState) {
 
 	v.viewerStates[state.UserID] = state
 	v.emitChange(&ViewerStateChange{
-		Name:    state.Name,
+		Nick:    state.Name,
 		Online:  true,
 		Channel: state.Channel,
 	})
@@ -182,7 +182,7 @@ func (v *ViewerStateStore) DumpChanges() []ViewerStateChange {
 	changes := make([]ViewerStateChange, 0, len(v.viewerStates))
 	for _, state := range v.viewerStates {
 		changes = append(changes, ViewerStateChange{
-			Name:    state.Name,
+			Nick:    state.Name,
 			Online:  true,
 			Channel: state.Channel,
 		})
