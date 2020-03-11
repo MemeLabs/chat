@@ -48,6 +48,14 @@ type ViewerState struct {
 	Channel           *StreamChannel `json:"channel"`
 }
 
+// Equals check if two ViewerStates are identical
+func (s *ViewerState) Equals(o *ViewerState) bool {
+	if s == nil || o == nil {
+		return s == o
+	}
+	return s.Online == o.Online && s.EnablePublicState == o.EnablePublicState && s.Channel.Equals(o.Channel)
+}
+
 // StreamChannel rustla channel definition
 type StreamChannel struct {
 	Channel string `json:"channel"`
@@ -147,7 +155,7 @@ func (v *ViewerStateStore) updatePublicState(state *ViewerState) {
 		return
 	}
 
-	if ok && prev.Channel.Equals(state.Channel) {
+	if ok && prev.Equals(state) {
 		return
 	}
 
