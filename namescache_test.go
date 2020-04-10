@@ -50,5 +50,4 @@ func TestNamescacheRefresh(t *testing.T) {
 	} else {
 		t.Errorf("Namescache did not have user %+v", nu)
 	}
-
 }

@@ -73,7 +73,7 @@ func (hub *Hub) run() {
 			d.c <- ips
 		case message := <-hub.broadcast:
 			// TODO should be channel, could lock up...
-			//TODO save into state in case of restart??
+			// TODO save into state in case of restart??
 			if message.event != "JOIN" && message.event != "QUIT" && message.event != "VIEWERSTATE" {
 				cacheChatEvent(message)
 			}

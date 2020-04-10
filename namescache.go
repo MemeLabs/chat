@@ -25,7 +25,6 @@ var namescache = namesCache{
 }
 
 func (nc *namesCache) updateNames() {
-
 	users := make([]*SimplifiedUser, 0, len(nc.users))
 
 	for _, u := range nc.users {
