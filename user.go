@@ -22,14 +22,7 @@ type userTools struct {
 	features    map[uint32][]string
 }
 
-var (
-	usertools = userTools{
-		nicklookup:  make(map[string]*uidprot),
-		nicklock:    sync.RWMutex{},
-		featurelock: sync.RWMutex{},
-		features:    make(map[uint32][]string),
-	}
-)
+var usertools = userTools{nicklookup: make(map[string]*uidprot), nicklock: sync.RWMutex{}, featurelock: sync.RWMutex{}, features: make(map[uint32][]string)}
 
 const (
 	ISADMIN      = 1 << iota
@@ -47,7 +40,7 @@ type uidprot struct {
 
 func (ut *userTools) getUseridForNick(nick string) (Userid, bool) {
 	ut.nicklock.RLock()
-	d, ok := uidprot{}, false //ut.nicklookup[strings.ToLower(nick)] //TODO reimplement...
+	d, ok := uidprot{}, false // ut.nicklookup[strings.ToLower(nick)] //TODO reimplement...
 	if !ok {
 		uid, protected := db.getUser(nick)
 		if uid != 0 {
@@ -85,7 +78,7 @@ type User struct {
 	id              Userid
 	nick            string
 	features        uint32
-	lastmessage     []byte //TODO remove?
+	lastmessage     []byte // TODO remove?
 	lastmessagetime time.Time
 	delayscale      uint8
 	simplified      *SimplifiedUser
@@ -94,13 +87,12 @@ type User struct {
 }
 
 type UserClaims struct {
-	UserId string `json:"id"` //TODO from rustla2 backend impl
+	UserId string `json:"id"` // TODO from rustla2 backend impl
 	jwt.StandardClaims
 }
 
 // TODO
 func parseJwt(cookie string) (*UserClaims, error) {
-
 	// verify jwt cookie - https://godoc.org/github.com/dgrijalva/jwt-go#example-Parse--Hmac
 	token, err := jwt.ParseWithClaims(cookie, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(JWTSECRET), nil
@@ -113,7 +105,7 @@ func parseJwt(cookie string) (*UserClaims, error) {
 		return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 	}
 
-	claims, ok := token.Claims.(*UserClaims) //TODO
+	claims, ok := token.Claims.(*UserClaims) // TODO
 
 	if !ok || !token.Valid {
 		return nil, errors.New("Token invalid")
@@ -122,12 +114,11 @@ func parseJwt(cookie string) (*UserClaims, error) {
 	return claims, nil
 }
 
-//TODO
+// TODO
 func userFromAPI(uuid string) (username string, err error) {
-
 	// TODO here we trusted signed id in claims json is well-formed uuid...
 
-	//TODO check exp-time as the backend does! (or not?) -- {"id":"uuid","exp":futurts}
+	// TODO check exp-time as the backend does! (or not?) -- {"id":"uuid","exp":futurts}
 
 	if err != nil {
 		fmt.Println("err1", uuid)
@@ -166,9 +157,8 @@ func userFromAPI(uuid string) (username string, err error) {
 }
 
 func userfromCookie(cookie string, ip string) (u *User, err error) {
-
 	// TODO remoteaddr in go contains port - now we use the header that doesnt... TODO standardize...
-	//ip = strings.Split(ip, ":")[0]
+	// ip = strings.Split(ip, ":")[0]
 
 	claims, err := parseJwt(cookie)
 	if err != nil {
@@ -184,7 +174,7 @@ func userfromCookie(cookie string, ip string) (u *User, err error) {
 
 	// ignoring the error for now
 	db.newUser(claims.UserId, username, ip)
-	//TODO err is expected for non-new users...
+	// TODO err is expected for non-new users...
 
 	// now get features from db, update stuff - TODO
 
@@ -194,7 +184,7 @@ func userfromCookie(cookie string, ip string) (u *User, err error) {
 		return nil, err
 	}
 
-	//finally update records...
+	// finally update records...
 	db.updateUser(Userid(uid), username, ip)
 
 	u = &User{
@@ -276,7 +266,7 @@ func (u *User) setFeatures(features []string) {
 			u.featureSet(ISBOT)
 		case "":
 			continue
-		default: //flairNN for future flairs
+		default: // flairNN for future flairs
 			if feature[:5] == "flair" {
 				flair, err := strconv.Atoi(feature[5:])
 				if err != nil {
@@ -337,7 +327,6 @@ func (u *User) assembleSimplifiedUser() {
 }
 
 func getUserFromWebRequest(r *http.Request) (user *User, banned bool, ip string) {
-
 	// TODO make this an option? - need this if run behind e.g. nginx
 	// TODO test
 	ip = r.Header.Get("X-Forwarded-For")

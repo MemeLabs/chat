@@ -14,24 +14,16 @@ type Bans struct {
 	iplock   sync.RWMutex // protects both ips/userips
 }
 
-var (
-	bans = Bans{
-		make(map[Userid]time.Time),
-		sync.RWMutex{},
-		make(map[string]time.Time),
-		make(map[Userid][]string),
-		sync.RWMutex{},
-	}
-)
+var bans = Bans{make(map[Userid]time.Time), sync.RWMutex{}, make(map[string]time.Time), make(map[Userid][]string), sync.RWMutex{}}
 
-func (b *Bans) run() { //TODO in init? probably need to init the structs here from db on start
+func (b *Bans) run() { // TODO in init? probably need to init the structs here from db on start
 	t := time.NewTicker(time.Minute)
 	for range t.C {
 		b.clean()
 	}
 }
 
-func (b *Bans) clean() { //TODO is this used / necessary???
+func (b *Bans) clean() { // TODO is this used / necessary???
 	b.userlock.Lock()
 	defer b.userlock.Unlock()
 	b.iplock.Lock()
@@ -66,8 +58,8 @@ func (b *Bans) banUser(uid Userid, targetuid Userid, ban *BanIn) {
 	b.log(uid, targetuid, ban, "")
 
 	if ban.BanIP {
-		//ips := getIPCacheForUser(targetuid) //TODO
-		//if len(ips) == 0 {
+		// ips := getIPCacheForUser(targetuid) //TODO
+		// if len(ips) == 0 {
 		ips := hub.getIPsForUserid(targetuid)
 		if len(ips) == 0 {
 			D("No ips found for user (offline)", targetuid)
@@ -153,7 +145,7 @@ func (b *Bans) loadActive() {
 	b.userips = make(map[Userid][]string)
 
 	db.getBans(func(uid Userid, ipaddress sql.NullString, endtimestamp time.Time) {
-		if endtimestamp.String() == "" { //TODO check is done before already? clean up...
+		if endtimestamp.String() == "" { // TODO check is done before already? clean up...
 			endtimestamp = getFuturetimeUTC()
 		}
 

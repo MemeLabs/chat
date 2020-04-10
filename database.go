@@ -40,7 +40,7 @@ func initDatabase(dbfile string) {
 	db.db = sqlx.MustConnect("sqlite3", dbfile)
 
 	bans.loadActive()
-	go db.runInsertBan() //TODO ???
+	go db.runInsertBan() // TODO ???
 	go db.runDeleteBan()
 }
 
@@ -139,7 +139,6 @@ func (db *database) runDeleteBan() {
 }
 
 func (db *database) insertBan(uid Userid, targetuid Userid, ban *BanIn, ip string) {
-
 	ipaddress := &sql.NullString{}
 	if ban.BanIP && len(ip) != 0 {
 		ipaddress.String = ip
@@ -179,7 +178,6 @@ func (db *database) getBans(f func(Userid, sql.NullString, time.Time)) {
 			endtimestamp > strftime('%s', 'now')
 		GROUP BY targetuserid, ipaddress
 	`)
-
 	if err != nil {
 		D("Unable to get active bans: ", err)
 		return
@@ -204,7 +202,6 @@ func (db *database) getBans(f func(Userid, sql.NullString, time.Time)) {
 }
 
 func (db *database) getUser(nick string) (Userid, bool) {
-
 	stmt := db.getStatement("getUser", `
 		SELECT
 			u.userid,
@@ -229,7 +226,6 @@ func (db *database) getUser(nick string) (Userid, bool) {
 
 // TODO ... for uuid-id conversion
 func (db *database) getUserInfo(uuid string) ([]string, int, error) {
-
 	stmt := db.getStatement("getUserInfo", `
 		SELECT
 			userid, features
@@ -245,14 +241,13 @@ func (db *database) getUserInfo(uuid string) ([]string, int, error) {
 	err := stmt.QueryRow(uuid).Scan(&uid, &f)
 	if err != nil {
 		D("features err", err)
-		return []string{}, -1, err //TODO -1 implications...
+		return []string{}, -1, err // TODO -1 implications...
 	}
-	features := strings.Split(f, ",") //TODO features are placed into db like this...
+	features := strings.Split(f, ",") // TODO features are placed into db like this...
 	return features, uid, nil
 }
 
 func (db *database) newUser(uuid string, name string, ip string) error {
-
 	// TODO
 	// chat-internal uid is autoincrement primary key...
 	// UNIQUE check on uuid makes sure of no double intserts.
@@ -270,9 +265,8 @@ func (db *database) newUser(uuid string, name string, ip string) error {
 	defer db.Unlock()
 
 	_, err := stmt.Exec(uuid, name, ip)
-
 	if err != nil {
-		D("newuser err", err) //TODO this is actually expected and normal for existing users...
+		D("newuser err", err) // TODO this is actually expected and normal for existing users...
 		return err
 	}
 
@@ -280,7 +274,6 @@ func (db *database) newUser(uuid string, name string, ip string) error {
 }
 
 func (db *database) updateUser(id Userid, name string, ip string) error {
-
 	stmt := db.getStatement("updateUser", `
 		UPDATE users SET 
 			nick = ?,
@@ -293,7 +286,6 @@ func (db *database) updateUser(id Userid, name string, ip string) error {
 	defer db.Unlock()
 
 	_, err := stmt.Exec(name, ip, id)
-
 	if err != nil {
 		D("updateUser err", err)
 		return err

@@ -371,11 +371,9 @@ func (c *Connection) OnBroadcast(data []byte) {
 	out := c.getEventDataOut()
 	out.Data = msg
 	c.Broadcast("BROADCAST", out)
-
 }
 
 func (c *Connection) canMsg(msg string, ignoresilence bool) bool {
-
 	msglen := utf8.RuneCountInString(msg)
 	if !utf8.ValidString(msg) || msglen == 0 || msglen > 512 || invalidmessage.MatchString(msg) {
 		c.SendError("invalidmsg")

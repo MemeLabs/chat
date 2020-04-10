@@ -30,11 +30,7 @@ type State struct {
 	sync.RWMutex
 }
 
-var (
-	state = &State{
-		mutes: make(map[Userid]time.Time),
-	}
-)
+var state = &State{mutes: make(map[Userid]time.Time)}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -63,13 +59,12 @@ var (
 	APIUSERID        = ""
 	USERNAMEAPI      = "http://localhost:8076/api/username/"
 	VIEWERSTATEAPI   = "http://localhost:8076/api/admin/viewer-state"
-	MSGCACHE         = []string{} //TODO redis replacement...
+	MSGCACHE         = []string{} // TODO redis replacement...
 	MSGCACHESIZE     = 150
 	MSGLOCK          sync.RWMutex
 )
 
 func main() {
-
 	c, err := conf.ReadConfigFile("settings.cfg")
 	if err != nil {
 		nc := conf.NewConfigFile()
@@ -130,7 +125,7 @@ func main() {
 	go bans.run()
 	go viewerStates.run()
 
-	//TODO hacked in api for compat
+	// TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			http.Error(w, "Method not allowed", 405)
@@ -215,7 +210,7 @@ func main() {
 }
 
 func getMaskedIP(s string) string {
-	var ipv6mask = net.CIDRMask(64, 128)
+	ipv6mask := net.CIDRMask(64, 128)
 	ip := net.ParseIP(s)
 	if ip.To4() == nil {
 		return ip.Mask(ipv6mask).String()
