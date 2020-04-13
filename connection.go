@@ -51,10 +51,11 @@ type EventDataIn struct {
 
 type EventDataOut struct {
 	*SimplifiedUser
-	Targetuserid Userid `json:"-"`
-	Timestamp    int64  `json:"timestamp"`
-	Data         string `json:"data,omitempty"`
-	Extradata    string `json:"extradata,omitempty"`
+	Targetuserid Userid    `json:"-"`
+	Timestamp    int64     `json:"timestamp"`
+	Data         string    `json:"data,omitempty"`
+	Extradata    string    `json:"extradata,omitempty"`
+	Entities     *Entities `json:"entities,omitempty"`
 }
 
 type BanIn struct {
@@ -83,10 +84,11 @@ type PrivmsgIn struct {
 type PrivmsgOut struct {
 	message
 	targetuid Userid
-	Messageid int64  `json:"messageid"`
-	Timestamp int64  `json:"timestamp"`
-	Nick      string `json:"nick,omitempty"`
-	Data      string `json:"data,omitempty"`
+	Messageid int64     `json:"messageid"`
+	Timestamp int64     `json:"timestamp"`
+	Nick      string    `json:"nick,omitempty"`
+	Data      string    `json:"data,omitempty"`
+	Entities  *Entities `json:"entities,omitempty"`
 }
 
 // Create a new connection using the specified socket and router.
@@ -370,6 +372,7 @@ func (c *Connection) OnBroadcast(data []byte) {
 
 	out := c.getEventDataOut()
 	out.Data = msg
+	out.Entities = entities.Extract(msg)
 	c.Broadcast("BROADCAST", out)
 }
 
@@ -453,6 +456,7 @@ func (c *Connection) OnMsg(data []byte) {
 
 	out := c.getEventDataOut()
 	out.Data = msg
+	out.Entities = entities.Extract(msg)
 	c.Broadcast("MSG", out)
 }
 
@@ -495,6 +499,7 @@ func (c *Connection) OnPrivmsg(data []byte) {
 		Data:      msg,
 		Messageid: 1337, // no saving in db means ids do not matter
 		Timestamp: unixMilliTime(),
+		Entities:  entities.Extract(msg),
 	}
 
 	pout.message.data, _ = Marshal(pout)
