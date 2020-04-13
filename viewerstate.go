@@ -155,7 +155,7 @@ func (v *ViewerStateStore) updatePublicState(state *ViewerState) {
 		return
 	}
 
-	if ok && prev.Equals(state) {
+	if prev.Equals(state) {
 		return
 	}
 

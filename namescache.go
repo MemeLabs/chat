@@ -78,6 +78,7 @@ func (nc *namesCache) add(user *User) *User {
 		}
 		user.simplified = su
 		nc.users[user.id] = user
+		entities.AddNick(user.nick)
 	}
 
 	nc.updateNames()
@@ -94,6 +95,7 @@ func (nc *namesCache) disconnect(user *User) {
 			conncount := atomic.AddInt32(&u.connections, -1)
 			if conncount <= 0 {
 				delete(nc.users, user.id)
+				entities.RemoveNick(u.nick)
 			}
 		}
 

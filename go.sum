@@ -1,5 +1,7 @@
-github.com/MemeLabs/chat-parser v0.0.0-20200409233434-3633664f904e h1:xIJQG9gd7QQav8ZYhnxudWPHnH3NOafIqmJzO8nwTKc=
-github.com/MemeLabs/chat-parser v0.0.0-20200409233434-3633664f904e/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
+github.com/MemeLabs/chat-parser v0.0.0-20200413045719-58ef6695ba1d h1:3x55bZXuXxxCytsbG83YAixdAU7krEHImc4iFP0C4kM=
+github.com/MemeLabs/chat-parser v0.0.0-20200413045719-58ef6695ba1d/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
+github.com/MemeLabs/chat-parser v1.0.0 h1:MmvRlmKpg5HwnNQs+oZu5u4O2dDnMj+xJnm5+h4UP1U=
+github.com/MemeLabs/chat-parser v1.0.0/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
@@ -10,6 +12,8 @@ github.com/go-sql-driver/mysql v1.4.0/go.mod h1:zAC/RDZ24gD3HViQzih4MyKcchzm+sOG
 github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvKCM=
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
+github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/jmoiron/sqlx v1.2.0 h1:41Ip0zITnmWNR/vHV+S4m+VoUivnWY5E4OJfLZjCJMA=
 github.com/jmoiron/sqlx v1.2.0/go.mod h1:1FEQNm3xlJgrMD+FBdI9+xvCksHtbpVBBw5dYhBSsks=
 github.com/lib/pq v1.0.0 h1:X5PMW56eZitiTeO7tKzZxFCSpbFZJtkMMooicw2us9A=
