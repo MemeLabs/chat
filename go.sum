@@ -2,6 +2,10 @@ github.com/MemeLabs/chat-parser v0.0.0-20200413045719-58ef6695ba1d h1:3x55bZXuXx
 github.com/MemeLabs/chat-parser v0.0.0-20200413045719-58ef6695ba1d/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
 github.com/MemeLabs/chat-parser v1.0.0 h1:MmvRlmKpg5HwnNQs+oZu5u4O2dDnMj+xJnm5+h4UP1U=
 github.com/MemeLabs/chat-parser v1.0.0/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
+github.com/MemeLabs/chat-parser v1.0.1 h1:NXbrnXIHxpQ/AhSx8YpTuIngBBmyaAnoujhLDKIDknY=
+github.com/MemeLabs/chat-parser v1.0.1/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
+github.com/MemeLabs/chat-parser v1.0.2 h1:+qauAkH5E1WNAkUpkGbmhwiJksJB1nQn6RSmT/RiHww=
+github.com/MemeLabs/chat-parser v1.0.2/go.mod h1:sJ6/lyctAYBGJrxNS649FT/ujrUTTvgznHnfAZOqDvA=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=

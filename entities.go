@@ -80,12 +80,12 @@ func (x *EntityExtractor) scheduleEmoteSync() {
 	}
 }
 
-func (x *EntityExtractor) AddNick(emote string) {
-	x.parserCtx.Nicks.Insert([]rune(emote))
+func (x *EntityExtractor) AddNick(nick string) {
+	x.parserCtx.Nicks.Insert([]rune(nick))
 }
 
-func (x *EntityExtractor) RemoveNick(emote string) {
-	x.parserCtx.Nicks.Remove([]rune(emote))
+func (x *EntityExtractor) RemoveNick(nick string) {
+	x.parserCtx.Nicks.Remove([]rune(nick))
 }
 
 func (x *EntityExtractor) Extract(msg string) *Entities {
