@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"regexp"
@@ -73,7 +72,7 @@ func (x *EntityExtractor) scheduleEmoteSync() {
 	for range time.NewTicker(time.Minute).C {
 		emotes, err := loadEmoteManifest()
 		if err != nil {
-			log.Println("failed to update emotes: %v", err)
+			log.Printf("failed to update emotes: %v", err)
 			continue
 		}
 		x.parserCtx.Emotes.Replace(parser.RunesFromStrings(emotes))
@@ -90,7 +89,6 @@ func (x *EntityExtractor) RemoveNick(nick string) {
 
 func (x *EntityExtractor) Extract(msg string) *Entities {
 	e := &Entities{}
-	addEntitiesFromSpan(e, parser.NewParser(x.parserCtx, parser.NewLexer(msg)).ParseMessage())
 
 	for _, b := range x.urls.FindAllStringIndex(msg, -1) {
 		e.Links = append(e.Links, &Link{
@@ -98,6 +96,8 @@ func (x *EntityExtractor) Extract(msg string) *Entities {
 			Bounds: [2]int{b[0], b[1]},
 		})
 	}
+
+	addEntitiesFromSpan(e, parser.NewParser(x.parserCtx, parser.NewLexer(msg)).ParseMessage())
 
 	return e
 }
@@ -122,7 +122,14 @@ func addEntitiesFromSpan(e *Entities, span *parser.Span) {
 		}
 	}
 
+EachNode:
 	for _, ni := range span.Nodes {
+		for _, l := range e.Links {
+			if l.Bounds[0] <= ni.Pos() && l.Bounds[1] >= ni.End() {
+				continue EachNode
+			}
+		}
+
 		switch n := ni.(type) {
 		case *parser.Emote:
 			e.Emotes = append(e.Emotes, &Emote{
@@ -188,31 +195,4 @@ type Entities struct {
 	Spoilers  []*Spoiler `json:"spoilers,omitempty"`
 	Greentext *Generic   `json:"greentext,omitempty"`
 	Me        *Generic   `json:"me,omitempty"`
-}
-
-func getEmotes() ([]string, error) {
-	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
-	if err != nil {
-		return nil, fmt.Errorf("failed to request emotes (%d): %v", resp.StatusCode, err)
-	}
-	defer resp.Body.Close()
-	response := struct {
-		Emotes []struct {
-			Name string `json:"name"`
-		} `json:"emotes"`
-	}{}
-	contents, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read emotes response: %v", err)
-	}
-
-	if err = json.Unmarshal(contents, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal emotes response: %v; %v", response, err)
-	}
-
-	var emotes []string
-	for _, emote := range response.Emotes {
-		emotes = append(emotes, emote.Name)
-	}
-	return emotes, nil
 }
