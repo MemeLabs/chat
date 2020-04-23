@@ -457,6 +457,12 @@ func (c *Connection) OnMsg(data []byte) {
 	out := c.getEventDataOut()
 	out.Data = msg
 	out.Entities = entities.Extract(msg)
+
+	if err := combos.Transform(out); err == ErrComboDuplicate {
+		c.SendError("duplicate")
+		return
+	}
+
 	c.Broadcast("MSG", out)
 }
 

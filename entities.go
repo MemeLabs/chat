@@ -162,6 +162,7 @@ type Emote struct {
 	Name      string   `json:"name,omitempty"`
 	Modifiers []string `json:"modifiers,omitempty"`
 	Bounds    [2]int   `json:"bounds,omitempty"`
+	Combo     int      `json:"combo,omitempty"`
 }
 
 type Nick struct {
