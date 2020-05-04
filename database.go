@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
@@ -36,8 +37,22 @@ var db = &database{
 	deleteban: make(chan *dbDeleteBan, 10),
 }
 
-func initDatabase(dbfile string) {
+func initDatabase(dbfile string, init bool) {
 	db.db = sqlx.MustConnect("sqlite3", dbfile)
+	if init {
+		sql, err := ioutil.ReadFile("db-init.sql")
+		if err != nil {
+			panic(err)
+		}
+
+		stmt, err := db.db.Prepare(string(sql))
+		if err != nil {
+			panic(err)
+		}
+
+		stmt.Exec()
+		stmt.Close()
+	}
 
 	bans.loadActive()
 	go db.runInsertBan() // TODO ???
