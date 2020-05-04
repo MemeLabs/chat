@@ -119,7 +119,7 @@ func main() {
 	runtime.GOMAXPROCS(int(processes))
 
 	state.load()
-	initDatabase(dbfile)
+	initDatabase(dbfile, false)
 
 	go hub.run()
 	go bans.run()
