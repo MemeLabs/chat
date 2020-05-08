@@ -489,9 +489,6 @@ func (c *Connection) OnPrivmsg(data []byte) {
 		return
 	}
 
-	// TODO check if user is online too
-	c.EmitBlock("PRIVMSGSENT", "")
-
 	// ephemeral private messages
 	// in particular, messages sent to users that are offline will never be delivered
 	// TODO search db instead? -> can tell user that name is right, but just offline.
@@ -509,6 +506,8 @@ func (c *Connection) OnPrivmsg(data []byte) {
 	}
 
 	pout.message.data, _ = Marshal(pout)
+
+	c.Emit("PRIVMSGSENT", pout)
 
 	hub.privmsg <- pout
 }
