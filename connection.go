@@ -83,12 +83,13 @@ type PrivmsgIn struct {
 
 type PrivmsgOut struct {
 	message
-	targetuid Userid
-	Messageid int64     `json:"messageid"`
-	Timestamp int64     `json:"timestamp"`
-	Nick      string    `json:"nick,omitempty"`
-	Data      string    `json:"data,omitempty"`
-	Entities  *Entities `json:"entities,omitempty"`
+	targetuid  Userid
+	Messageid  int64     `json:"messageid"`
+	Timestamp  int64     `json:"timestamp"`
+	Nick       string    `json:"nick,omitempty"`
+	TargetNick string    `json:"targetNick,omitempty"`
+	Data       string    `json:"data,omitempty"`
+	Entities   *Entities `json:"entities,omitempty"`
 }
 
 // Create a new connection using the specified socket and router.
@@ -497,12 +498,13 @@ func (c *Connection) OnPrivmsg(data []byte) {
 		message: message{
 			event: "PRIVMSG",
 		},
-		Nick:      c.user.nick,
-		targetuid: Userid(tuid),
-		Data:      msg,
-		Messageid: 1337, // no saving in db means ids do not matter
-		Timestamp: unixMilliTime(),
-		Entities:  entities.Extract(msg),
+		Nick:       c.user.nick,
+		TargetNick: pin.Nick,
+		targetuid:  Userid(tuid),
+		Data:       msg,
+		Messageid:  1337, // no saving in db means ids do not matter
+		Timestamp:  unixMilliTime(),
+		Entities:   entities.Extract(msg),
 	}
 
 	pout.message.data, _ = Marshal(pout)
