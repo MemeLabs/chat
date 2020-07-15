@@ -32,11 +32,6 @@ type State struct {
 
 var state = &State{mutes: make(map[Userid]time.Time)}
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
 const (
 	WRITETIMEOUT         = 10 * time.Second
 	READTIMEOUT          = time.Minute
@@ -123,6 +118,17 @@ func main() {
 	go hub.run()
 	go bans.run()
 	go viewerStates.run()
+
+	var checkOrigin func(r *http.Request) bool
+	if debuggingenabled {
+		checkOrigin = func(r *http.Request) bool { return true }
+	}
+
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     checkOrigin,
+	}
 
 	// TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
