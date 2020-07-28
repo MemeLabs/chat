@@ -463,6 +463,7 @@ func (c *Connection) OnMsg(data []byte) {
 		c.SendError("duplicate")
 		return
 	}
+	TransformRares(out)
 
 	c.Broadcast("MSG", out)
 }
