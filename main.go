@@ -62,6 +62,7 @@ var (
 	MSGCACHE         = []string{} // TODO redis replacement...
 	MSGCACHESIZE     = 150
 	MSGLOCK          sync.RWMutex
+	RARECHANCE       = 0.00001
 )
 
 func main() {
@@ -80,6 +81,7 @@ func main() {
 		nc.AddOption("default", "usernameapi", USERNAMEAPI)
 		nc.AddOption("default", "viewerstateapi", VIEWERSTATEAPI)
 		nc.AddOption("default", "messagecachesize", "150")
+		nc.AddOption("default", "rarechance", "0.00001")
 
 		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
@@ -103,6 +105,7 @@ func main() {
 	USERNAMEAPI, _ = c.GetString("default", "usernameapi")
 	VIEWERSTATEAPI, _ = c.GetString("default", "viewerstateapi")
 	msgcachesize, _ := c.GetInt64("default", "messagecachesize")
+	RARECHANCE, _ = c.GetFloat("default", "rarechance")
 
 	if JWTSECRET == "" {
 		JWTSECRET = "PepoThink"
