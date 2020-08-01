@@ -14,7 +14,7 @@ import (
 
 var entities *EntityExtractor
 
-func init() {
+func initEntities() {
 	var err error
 	entities, err = NewEntityExtractor()
 	if err != nil {
@@ -25,7 +25,7 @@ func init() {
 }
 
 func loadEmoteManifest() ([]string, error) {
-	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
+	resp, err := http.Get(EMOTEMANIFEST)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get emotes: %w", err)
 	}
@@ -49,7 +49,7 @@ func loadEmoteManifest() ([]string, error) {
 func NewEntityExtractor() (*EntityExtractor, error) {
 	emotes, err := loadEmoteManifest()
 	if err != nil {
-		return nil, err
+		log.Printf("failed to update emotes: %v", err)
 	}
 
 	return &EntityExtractor{
