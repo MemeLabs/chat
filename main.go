@@ -121,6 +121,7 @@ func main() {
 
 	state.load()
 	initDatabase(dbfile, false)
+	initEntities()
 
 	go hub.run()
 	go bans.run()
