@@ -220,8 +220,7 @@ func (db *database) getUser(nick string) (Userid, bool) {
 	stmt := db.getStatement("getUser", `
 		SELECT
 			u.userid,
-			instr(u.features, 'admin') OR
-			instr(u.features, 'protected')
+			instr(u.features, 'admin')
 		FROM users AS u
 		WHERE u.nick = ?
 	`)
