@@ -6,6 +6,8 @@ import (
 )
 
 func TestNamescacheRefresh(t *testing.T) {
+	initEntities()
+
 	uid := Userid(1)
 
 	u := &User{}

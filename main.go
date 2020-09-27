@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,12 +32,6 @@ type State struct {
 }
 
 var state = &State{mutes: make(map[Userid]time.Time)}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
-}
 
 const (
 	WRITETIMEOUT         = 10 * time.Second
@@ -62,6 +57,8 @@ var (
 	MSGCACHE         = []string{} // TODO redis replacement...
 	MSGCACHESIZE     = 150
 	MSGLOCK          sync.RWMutex
+	RARECHANCE       = 0.00001
+	EMOTEMANIFEST    = "http://localhost:18078/emote-manifest.json"
 )
 
 func main() {
@@ -80,6 +77,8 @@ func main() {
 		nc.AddOption("default", "usernameapi", USERNAMEAPI)
 		nc.AddOption("default", "viewerstateapi", VIEWERSTATEAPI)
 		nc.AddOption("default", "messagecachesize", "150")
+		nc.AddOption("default", "rarechance", strconv.FormatFloat(RARECHANCE, 'f', -1, 64))
+		nc.AddOption("default", "emotemanifest", EMOTEMANIFEST)
 
 		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
@@ -103,6 +102,8 @@ func main() {
 	USERNAMEAPI, _ = c.GetString("default", "usernameapi")
 	VIEWERSTATEAPI, _ = c.GetString("default", "viewerstateapi")
 	msgcachesize, _ := c.GetInt64("default", "messagecachesize")
+	RARECHANCE, _ = c.GetFloat("default", "rarechance")
+	EMOTEMANIFEST, _ = c.GetString("default", "emotemanifest")
 
 	if JWTSECRET == "" {
 		JWTSECRET = "PepoThink"
@@ -124,6 +125,17 @@ func main() {
 	go hub.run()
 	go bans.run()
 	go viewerStates.run()
+
+	var checkOrigin func(r *http.Request) bool
+	if debuggingenabled {
+		checkOrigin = func(r *http.Request) bool { return true }
+	}
+
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     checkOrigin,
+	}
 
 	// TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
