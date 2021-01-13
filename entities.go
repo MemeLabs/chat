@@ -24,30 +24,32 @@ func initEntities() {
 	go entities.scheduleEmoteSync()
 }
 
-func loadEmoteManifest() ([]string, error) {
+func loadEmoteManifest() (emotes, modifiers, tags []string, err error) {
 	resp, err := http.Get(EMOTEMANIFEST)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get emotes: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get emotes: %w", err)
 	}
 	defer resp.Body.Close()
 	manifest := struct {
 		Emotes []struct {
 			Name string `json:"name"`
 		} `json:"emotes"`
+		Modifiers []string `json:"modifiers"`
+		Tags      []string `json:"tags"`
 	}{}
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse emotes manifest: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse emotes manifest: %w", err)
 	}
 
-	emotes := make([]string, len(manifest.Emotes))
+	emotes = make([]string, len(manifest.Emotes))
 	for i, e := range manifest.Emotes {
 		emotes[i] = e.Name
 	}
-	return emotes, nil
+	return emotes, manifest.Modifiers, manifest.Tags, nil
 }
 
 func NewEntityExtractor() (*EntityExtractor, error) {
-	emotes, err := loadEmoteManifest()
+	emotes, modifiers, tags, err := loadEmoteManifest()
 	if err != nil {
 		log.Printf("failed to update emotes: %v", err)
 	}
@@ -56,8 +58,8 @@ func NewEntityExtractor() (*EntityExtractor, error) {
 		parserCtx: parser.NewParserContext(parser.ParserContextValues{
 			Emotes:         emotes,
 			Nicks:          []string{},
-			Tags:           []string{"nsfw", "weeb", "nsfl", "loud"},
-			EmoteModifiers: []string{"mirror", "flip", "rain", "snow", "rustle", "worth", "love", "spin", "wide", "lag", "hyper"},
+			Tags:           tags,
+			EmoteModifiers: modifiers,
 		}),
 		urls: xurls.Relaxed(),
 	}, nil
@@ -70,12 +72,14 @@ type EntityExtractor struct {
 
 func (x *EntityExtractor) scheduleEmoteSync() {
 	for range time.NewTicker(time.Minute).C {
-		emotes, err := loadEmoteManifest()
+		emotes, modifiers, tags, err := loadEmoteManifest()
 		if err != nil {
 			log.Printf("failed to update emotes: %v", err)
 			continue
 		}
 		x.parserCtx.Emotes.Replace(parser.RunesFromStrings(emotes))
+		x.parserCtx.EmoteModifiers.Replace(parser.RunesFromStrings(modifiers))
+		x.parserCtx.Tags.Replace(parser.RunesFromStrings(tags))
 	}
 }
 
