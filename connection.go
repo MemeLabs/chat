@@ -221,7 +221,7 @@ func (c *Connection) writePumpText() {
 			c.rlockUserIfExists()
 			if data, err := Marshal(m.data); err == nil {
 				c.runlockUserIfExists()
-				if data, err := Pack(m.event, data); err == nil {
+				if data, err = Pack(m.event, data); err == nil {
 					if err := c.write(websocket.TextMessage, data); err != nil {
 						return
 					}
@@ -233,7 +233,7 @@ func (c *Connection) writePumpText() {
 			c.rlockUserIfExists()
 			if data, err := Marshal(m.data); err == nil {
 				c.runlockUserIfExists()
-				if data, err := Pack(m.event, data); err == nil {
+				if data, err = Pack(m.event, data); err == nil {
 					typ := m.msgtyp
 					if typ == 0 {
 						typ = websocket.TextMessage
@@ -246,13 +246,14 @@ func (c *Connection) writePumpText() {
 				c.runlockUserIfExists()
 			}
 		case message := <-c.sendmarshalled:
+			var err error
 			data := message.data.([]byte)
-			if data, err := Pack(message.event, data); err == nil {
+			if data, err = Pack(message.event, data); err == nil {
 				typ := message.msgtyp
 				if typ == 0 {
 					typ = websocket.TextMessage
 				}
-				if err := c.write(typ, data); err != nil {
+				if err = c.write(typ, data); err != nil {
 					return
 				}
 			}

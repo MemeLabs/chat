@@ -45,13 +45,13 @@ func (hub *Hub) run() {
 		case c := <-hub.unregister:
 			delete(hub.connections, c)
 		case userid := <-hub.refreshuser:
-			for c, _ := range hub.connections {
+			for c := range hub.connections {
 				if c.user != nil && c.user.id == userid {
 					go c.Refresh()
 				}
 			}
 		case userid := <-hub.bans:
-			for c, _ := range hub.connections {
+			for c := range hub.connections {
 				if c.user != nil && c.user.id == userid {
 					go c.Banned()
 				}
@@ -65,7 +65,7 @@ func (hub *Hub) run() {
 			}
 		case d := <-hub.getips:
 			ips := make([]string, 0, 3)
-			for c, _ := range hub.connections {
+			for c := range hub.connections {
 				if c.user != nil && c.user.id == d.userid {
 					ips = append(ips, c.ip)
 				}
@@ -84,7 +84,7 @@ func (hub *Hub) run() {
 				}
 			}
 		case p := <-hub.privmsg:
-			for c, _ := range hub.connections {
+			for c := range hub.connections {
 				if c.user != nil && c.user.id == p.targetuid {
 					if len(c.sendmarshalled) < SENDCHANNELSIZE {
 						c.sendmarshalled <- &p.message

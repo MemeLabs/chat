@@ -80,7 +80,7 @@ func main() {
 		nc.AddOption("default", "rarechance", strconv.FormatFloat(RARECHANCE, 'f', -1, 64))
 		nc.AddOption("default", "emotemanifest", EMOTEMANIFEST)
 
-		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
+		if err = nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
 		}
 		if c, err = conf.ReadConfigFile("settings.cfg"); err != nil {
@@ -132,7 +132,7 @@ func main() {
 		checkOrigin = func(r *http.Request) bool { return true }
 	}
 
-	var upgrader = websocket.Upgrader{
+	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin:     checkOrigin,
@@ -141,23 +141,23 @@ func main() {
 	// TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		jwtcookie, err := r.Cookie(JWTCOOKIENAME)
 		if err != nil {
-			http.Error(w, "Not logged in", 401)
+			http.Error(w, "Not logged in", http.StatusUnauthorized)
 			return
 		}
 		claims, err := parseJwt(jwtcookie.Value)
 		if err != nil {
-			http.Error(w, "Not logged in", 401)
+			http.Error(w, "Not logged in", http.StatusUnauthorized)
 			return
 		}
-		username, err := userFromAPI(claims.UserId)
+		username, _, err := userFromAPI(claims.UserID)
 		if err != nil {
-			http.Error(w, "Really makes you think", 401)
+			http.Error(w, "Really makes you think", http.StatusUnauthorized)
 			return
 		}
 
@@ -168,7 +168,7 @@ func main() {
 	// TODO cache foo
 	http.HandleFunc("/api/chat/history", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -184,7 +184,7 @@ func main() {
 	// TODO cache foo
 	http.HandleFunc("/api/chat/viewer-states", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -196,7 +196,7 @@ func main() {
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 

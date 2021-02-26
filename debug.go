@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+
 	//"github.com/emicklei/hopwatch"
 	"bytes"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"time"
 )
 
+// ErrorTrace ...
 // source https://groups.google.com/forum/?fromgroups#!topic/golang-nuts/C24fRw8HDmI
 // from David Wright
 type ErrorTrace struct {
@@ -46,7 +48,7 @@ func B(v ...interface{}) {
 	println(ts, NewErrorTrace(v...).Error())
 }
 
-// Unused ...
+// F ...
 func F(v ...interface{}) {
 	ts := time.Now().Format("2006-02-01 15:04:05: ")
 	println(ts, NewErrorTrace(v...).Error())
