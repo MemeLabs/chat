@@ -21,6 +21,7 @@ RUN cp /build/chat .
 FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /dist/chat /
+COPY db-init.sql /
 
 EXPOSE 9998
 
