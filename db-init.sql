@@ -1,5 +1,4 @@
-
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     userid INTEGER PRIMARY KEY AUTOINCREMENT, /* legacy chat id */
     uuid TEXT NOT NULL UNIQUE, /* strims id */
     nick TEXT NOT NULL,
@@ -9,7 +8,7 @@ CREATE TABLE users (
     lastip TEXT NOT NULL
 );
 
-CREATE TABLE bans (
+CREATE TABLE IF NOT EXISTS bans (
     userid INTEGER NOT NULL, /*TODO? userid cant be uniq because deleteBan does not delete row, just update expiretime to NOW. on reban we get another ban for same id */
     targetuserid INTEGER NOT NULL, 
     ipaddress TEXT, 
