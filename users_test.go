@@ -39,9 +39,6 @@ func TestFeatures(t *testing.T) {
 	u.id = uid
 	u.nick = nick
 
-	if u.featureGet(ISPROTECTED) {
-		t.Error("feature should not be set")
-	}
 	if u.featureGet(ISSUBSCRIBER) {
 		t.Error("feature should not be set")
 	}
@@ -62,9 +59,6 @@ func TestFeatures(t *testing.T) {
 			t.Error("feature should not be set")
 		}
 	}
-	if u.isProtected() {
-		t.Error("should not be protected")
-	}
 	if u.isBot() {
 		t.Error("should not be bot")
 	}
@@ -76,12 +70,9 @@ func TestFeatures(t *testing.T) {
 	}
 
 	//--------
-	features := []string{"admin", "moderator", "protected", "subscriber", "vip", "bot"}
+	features := []string{"admin", "moderator", "subscriber", "vip", "bot"}
 	u.setFeatures(features)
 
-	if !u.featureGet(ISPROTECTED) {
-		t.Error("feature should be set")
-	}
 	if !u.featureGet(ISSUBSCRIBER) {
 		t.Error("feature should be set")
 	}
@@ -101,9 +92,6 @@ func TestFeatures(t *testing.T) {
 		if u.featureGet(1 << i) {
 			t.Error("feature should not be set")
 		}
-	}
-	if !u.isProtected() {
-		t.Error("should be protected")
 	}
 	if !u.isBot() {
 		t.Error("should be bot")

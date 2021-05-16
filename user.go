@@ -28,7 +28,6 @@ const (
 	ISADMIN      = 1 << iota
 	ISMODERATOR  = 1 << iota
 	ISVIP        = 1 << iota
-	ISPROTECTED  = 1 << iota
 	ISSUBSCRIBER = 1 << iota
 	ISBOT        = 1 << iota
 )
@@ -246,7 +245,7 @@ func (u *User) isBot() bool {
 
 // isProtected checks if the user can be moderated or not
 func (u *User) isProtected() bool {
-	return u.featureGet(ISADMIN | ISPROTECTED)
+	return u.featureGet(ISADMIN)
 }
 
 func (u *User) setFeatures(features []string) {
@@ -256,8 +255,6 @@ func (u *User) setFeatures(features []string) {
 			u.featureSet(ISADMIN)
 		case "moderator":
 			u.featureSet(ISMODERATOR)
-		case "protected":
-			u.featureSet(ISPROTECTED)
 		case "subscriber":
 			u.featureSet(ISSUBSCRIBER)
 		case "vip":
@@ -291,9 +288,6 @@ func (u *User) assembleSimplifiedUser() {
 
 		numfeatures := u.featureCount()
 		f = make([]string, 0, numfeatures)
-		if u.featureGet(ISPROTECTED) {
-			f = append(f, "protected")
-		}
 		if u.featureGet(ISSUBSCRIBER) {
 			f = append(f, "subscriber")
 		}

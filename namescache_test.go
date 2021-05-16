@@ -13,7 +13,7 @@ func TestNamescacheRefresh(t *testing.T) {
 	u := &User{}
 	u.id = uid
 	u.nick = "testnick"
-	u.setFeatures([]string{"admin", "moderator", "protected", "subscriber", "vip", "bot"})
+	u.setFeatures([]string{"admin", "moderator", "subscriber", "vip", "bot"})
 	u.assembleSimplifiedUser()
 
 	nc := &namesCache{
@@ -27,7 +27,7 @@ func TestNamescacheRefresh(t *testing.T) {
 		if nu.connections != 1 {
 			t.Errorf("Usercount was not 1 but %v, %+v", u.connections, u)
 		}
-		if len(*nu.simplified.Features) != 6 {
+		if len(*nu.simplified.Features) != 5 {
 			t.Errorf("Simplified user features length was not 6 %+v", nu.simplified.Features)
 		}
 	} else {
@@ -37,7 +37,6 @@ func TestNamescacheRefresh(t *testing.T) {
 	u = &User{}
 	u.id = uid
 	u.nick = "NEWNICK"
-	u.setFeatures([]string{"protected"})
 	u.assembleSimplifiedUser()
 
 	nc.refresh(u)
@@ -46,8 +45,8 @@ func TestNamescacheRefresh(t *testing.T) {
 		if nu.nick != "NEWNICK" {
 			t.Errorf("Users refresh did not succeed, nick was %+v", nu.nick)
 		}
-		if len(*nu.simplified.Features) != 1 {
-			t.Errorf("Simplified user features length was not 1 %+v", nu.simplified.Features)
+		if len(*nu.simplified.Features) != 0 {
+			t.Errorf("Simplified user features length was not 0 %+v", nu.simplified.Features)
 		}
 	} else {
 		t.Errorf("Namescache did not have user %+v", nu)
