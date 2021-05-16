@@ -79,8 +79,9 @@ func main() {
 		nc.AddOption("default", "messagecachesize", "150")
 		nc.AddOption("default", "rarechance", strconv.FormatFloat(RARECHANCE, 'f', -1, 64))
 		nc.AddOption("default", "emotemanifest", EMOTEMANIFEST)
+		nc.AddOption("default", "initdb", "false")
 
-		if err := nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
+		if err = nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
 		}
 		if c, err = conf.ReadConfigFile("settings.cfg"); err != nil {
@@ -94,6 +95,7 @@ func main() {
 	delay, _ := c.GetInt64("default", "chatdelay")
 	maxthrottletime, _ := c.GetInt64("default", "maxthrottletime")
 	dbfile, _ := c.GetString("default", "dbfile")
+	initdb, _ := c.GetBool("default", "initdb")
 	DELAY = time.Duration(delay)
 	MAXTHROTTLETIME = time.Duration(maxthrottletime)
 	JWTSECRET, _ = c.GetString("default", "jwtsecret")
@@ -120,7 +122,7 @@ func main() {
 	runtime.GOMAXPROCS(int(processes))
 
 	state.load()
-	initDatabase(dbfile, false)
+	initDatabase(dbfile, initdb)
 	initEntities()
 
 	go hub.run()
@@ -132,7 +134,7 @@ func main() {
 		checkOrigin = func(r *http.Request) bool { return true }
 	}
 
-	var upgrader = websocket.Upgrader{
+	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin:     checkOrigin,
