@@ -143,23 +143,23 @@ func main() {
 	// TODO hacked in api for compat
 	http.HandleFunc("/api/chat/me", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		jwtcookie, err := r.Cookie(JWTCOOKIENAME)
 		if err != nil {
-			http.Error(w, "Not logged in", 401)
+			http.Error(w, "Not logged in", http.StatusUnauthorized)
 			return
 		}
 		claims, err := parseJwt(jwtcookie.Value)
 		if err != nil {
-			http.Error(w, "Not logged in", 401)
+			http.Error(w, "Not logged in", http.StatusUnauthorized)
 			return
 		}
-		username, err := userFromAPI(claims.UserId)
+		username, _, err := userFromAPI(claims.UserID)
 		if err != nil {
-			http.Error(w, "Really makes you think", 401)
+			http.Error(w, "Really makes you think", http.StatusUnauthorized)
 			return
 		}
 
@@ -170,7 +170,7 @@ func main() {
 	// TODO cache foo
 	http.HandleFunc("/api/chat/history", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -186,7 +186,7 @@ func main() {
 	// TODO cache foo
 	http.HandleFunc("/api/chat/viewer-states", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -198,7 +198,7 @@ func main() {
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 

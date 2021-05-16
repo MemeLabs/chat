@@ -31,6 +31,7 @@ const (
 	ISPROTECTED  = 1 << iota
 	ISSUBSCRIBER = 1 << iota
 	ISBOT        = 1 << iota
+	ISBIRTHDAY   = 1 << iota
 )
 
 type uidprot struct {
@@ -87,7 +88,7 @@ type User struct {
 }
 
 type UserClaims struct {
-	UserId string `json:"id"` // TODO from rustla2 backend impl
+	UserID string `json:"id"` // TODO from rustla2 backend impl
 	jwt.StandardClaims
 }
 
@@ -98,62 +99,63 @@ func parseJwt(cookie string) (*UserClaims, error) {
 		return []byte(JWTSECRET), nil
 	})
 	if err != nil {
-		return nil, errors.New("Token invalid")
+		return nil, errors.New("token invalid")
 	}
 
 	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-		return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 	}
 
 	claims, ok := token.Claims.(*UserClaims) // TODO
 
 	if !ok || !token.Valid {
-		return nil, errors.New("Token invalid")
+		return nil, errors.New("token invalid")
 	}
 
 	return claims, nil
 }
 
 // TODO
-func userFromAPI(uuid string) (username string, err error) {
+func userFromAPI(uuid string) (username string, createdAt int64, err error) {
 	// TODO here we trusted signed id in claims json is well-formed uuid...
 
 	// TODO check exp-time as the backend does! (or not?) -- {"id":"uuid","exp":futurts}
 
 	if err != nil {
 		fmt.Println("err1", uuid)
-		return "", err
+		return "", 0, err
 	}
 
 	// TODO - get username from api
 	type un struct {
-		Username string `json:"username"`
+		Username  string `json:"username"`
+		CreatedAt int64  `json:"created_at"`
 	}
 
 	resp, err := http.Get(fmt.Sprintf("%s%s", USERNAMEAPI, uuid))
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("err2", err)
-		return "", err
+		return "", 0, err
 	}
 
 	response := un{}
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		fmt.Println("err3", err)
-		return "", err
+		return "", 0, err
 	}
 
 	D("username parsed:", response)
 	if response.Username == "" {
-		return "", errors.New("User needs to set a username")
+		return "", 0, errors.New("User needs to set a username")
 	}
 
-	return response.Username, nil
+	return response.Username, response.CreatedAt, nil
 }
 
 func userfromCookie(cookie string, ip string) (u *User, err error) {
@@ -165,23 +167,31 @@ func userfromCookie(cookie string, ip string) (u *User, err error) {
 		return nil, err
 	}
 
-	username, err := userFromAPI(claims.UserId)
+	username, createdAt, err := userFromAPI(claims.UserID)
 	if err != nil {
 		return nil, err
 	}
 
 	// if user not found, insert new user into db
 
-	// ignoring the error for now
-	db.newUser(claims.UserId, username, ip)
 	// TODO err is expected for non-new users...
+	// ignoring the error for now
+	_ = db.newUser(claims.UserID, username, ip)
 
 	// now get features from db, update stuff - TODO
 
-	features, uid, err := db.getUserInfo(claims.UserId)
+	now := time.Now()
+	t := time.Unix(createdAt, 0)
+
+	features, uid, err := db.getUserInfo(claims.UserID)
 	if err != nil {
 		fmt.Println("err4", err)
 		return nil, err
+	}
+
+	//	if now.Day() == t.Day() && now.Month() == t.Month() && now.Year() == t.Year() {
+	if now.YearDay() == t.YearDay() {
+		features = append(features, "birthday")
 	}
 
 	// finally update records...
@@ -264,6 +274,8 @@ func (u *User) setFeatures(features []string) {
 			u.featureSet(ISVIP)
 		case "bot":
 			u.featureSet(ISBOT)
+		case "birthday":
+			u.featureSet(ISBIRTHDAY)
 		case "":
 			continue
 		default: // flairNN for future flairs
@@ -273,8 +285,8 @@ func (u *User) setFeatures(features []string) {
 					D("Could not parse unknown feature:", feature, err)
 					continue
 				}
-				// six proper features, all others are just useless flairs
-				u.featureSet(1 << (6 + uint8(flair)))
+				// seven proper features, all others are just useless flairs
+				u.featureSet(1 << (7 + uint8(flair)))
 			}
 		}
 	}
@@ -309,8 +321,11 @@ func (u *User) assembleSimplifiedUser() {
 		if u.featureGet(ISBOT) {
 			f = append(f, "bot")
 		}
+		if u.featureGet(ISBIRTHDAY) {
+			f = append(f, "birthday")
+		}
 
-		for i := uint8(6); i <= 26; i++ {
+		for i := uint8(7); i <= 26; i++ {
 			if u.featureGet(1 << i) {
 				flair := fmt.Sprintf("flair%d", i-6)
 				f = append(f, flair)
