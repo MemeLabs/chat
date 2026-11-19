@@ -1,6 +1,8 @@
 package main
 
 import (
+	"sort"
+	"strconv"
 	"time"
 )
 
@@ -15,6 +17,9 @@ type Hub struct {
 	getips      chan useridips
 	users       map[Userid]*User
 	refreshuser chan Userid
+	// lastEventID is the id given to the most recent broadcast event. Only
+	// hub.run touches it.
+	lastEventID int64
 }
 
 type useridips struct {
@@ -33,6 +38,19 @@ var hub = Hub{
 	getips:      make(chan useridips),
 	users:       make(map[Userid]*User),
 	refreshuser: make(chan Userid, 4),
+	// seed event ids from the clock so they keep increasing across restarts
+	// and clients resuming from a previous process still get new events.
+	lastEventID: unixMilliTime() * 1000,
+}
+
+type cachedEvent struct {
+	id     int64
+	packed string
+}
+
+type replayOut struct {
+	Complete bool     `json:"complete"`
+	Events   []string `json:"events"`
 }
 
 func (hub *Hub) run() {
@@ -42,6 +60,11 @@ func (hub *Hub) run() {
 		select {
 		case c := <-hub.register:
 			hub.connections[c] = true
+			// the snapshot and registration both happen on this goroutine, so
+			// the replay ends exactly where live delivery to c begins.
+			if c.since > 0 {
+				hub.replay(c)
+			}
 		case c := <-hub.unregister:
 			delete(hub.connections, c)
 		case userid := <-hub.refreshuser:
@@ -74,8 +97,12 @@ func (hub *Hub) run() {
 		case message := <-hub.broadcast:
 			// TODO should be channel, could lock up...
 			// TODO save into state in case of restart??
+			hub.lastEventID++
+			id := hub.lastEventID
+			message.data = withEventID(message.data.([]byte), id)
+
 			if message.event != "JOIN" && message.event != "QUIT" && message.event != "VIEWERSTATE" {
-				cacheChatEvent(message)
+				cacheChatEvent(message, id)
 			}
 
 			for c := range hub.connections {
@@ -105,17 +132,41 @@ func (hub *Hub) run() {
 	}
 }
 
-// TODO redis replacement
-func cacheChatEvent(msg *message) {
-	if len(MSGCACHE) <= 0 {
+// withEventID inserts an "id" field at the start of a marshalled JSON object.
+// Payloads that are not JSON objects are returned unchanged.
+func withEventID(data []byte, id int64) []byte {
+	if len(data) < 2 || data[0] != '{' {
+		return data
+	}
+
+	out := make([]byte, 0, len(data)+24)
+	out = append(out, `{"id":`...)
+	out = strconv.AppendInt(out, id, 10)
+	if data[1] != '}' {
+		out = append(out, ',')
+	}
+	return append(out, data[1:]...)
+}
+
+// replay sends c the cached events it missed since c.since.
+func (hub *Hub) replay(c *Connection) {
+	events, complete := getCacheSince(c.since)
+	data, err := Marshal(&replayOut{Complete: complete, Events: events})
+	if err != nil {
+		D("replay marshal error", err)
 		return
 	}
 
-	MSGLOCK.Lock()
-	defer MSGLOCK.Unlock()
+	select {
+	case c.sendmarshalled <- &message{event: "REPLAY", data: data}:
+	default:
+	}
+}
 
-	if len(MSGCACHE) >= MSGCACHESIZE {
-		MSGCACHE = MSGCACHE[1:]
+// TODO redis replacement
+func cacheChatEvent(msg *message, id int64) {
+	if MSGCACHESIZE <= 0 {
+		return
 	}
 
 	data, err := Pack(msg.event, msg.data.([]byte))
@@ -124,22 +175,42 @@ func cacheChatEvent(msg *message) {
 		return
 	}
 
-	MSGCACHE = append(MSGCACHE, string(data[:]))
+	MSGLOCK.Lock()
+	defer MSGLOCK.Unlock()
+
+	if len(MSGCACHE) >= MSGCACHESIZE {
+		MSGEVICTEDID = MSGCACHE[0].id
+		MSGCACHE = MSGCACHE[1:]
+	}
+
+	MSGCACHE = append(MSGCACHE, cachedEvent{id, string(data)})
 }
 
-// TODO
 func getCache() []string {
 	MSGLOCK.RLock()
 	defer MSGLOCK.RUnlock()
 
-	out := []string{}
+	out := make([]string, 0, len(MSGCACHE))
 	for _, v := range MSGCACHE {
-		if v != "" {
-			out = append(out, v)
-		}
+		out = append(out, v.packed)
 	}
 
 	return out
+}
+
+// getCacheSince returns the cached events with ids greater than since, and
+// whether that covers every event since then (none were evicted).
+func getCacheSince(since int64) ([]string, bool) {
+	MSGLOCK.RLock()
+	defer MSGLOCK.RUnlock()
+
+	i := sort.Search(len(MSGCACHE), func(i int) bool { return MSGCACHE[i].id > since })
+	out := make([]string, 0, len(MSGCACHE)-i)
+	for _, v := range MSGCACHE[i:] {
+		out = append(out, v.packed)
+	}
+
+	return out, MSGEVICTEDID <= since
 }
 
 func (hub *Hub) getIPsForUserid(userid Userid) []string {
