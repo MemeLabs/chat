@@ -54,8 +54,9 @@ var (
 	APIUSERID        = ""
 	USERNAMEAPI      = "http://localhost:8076/api/username/"
 	VIEWERSTATEAPI   = "http://localhost:8076/api/admin/viewer-state"
-	MSGCACHE         = []string{} // TODO redis replacement...
+	MSGCACHE         = []cachedEvent{} // TODO redis replacement...
 	MSGCACHESIZE     = 150
+	MSGEVICTEDID     int64 // id of the newest event dropped from MSGCACHE
 	MSGLOCK          sync.RWMutex
 	RARECHANCE       = 0.00001
 	EMOTEMANIFEST    = "http://localhost:18078/emote-manifest.json"
@@ -114,7 +115,7 @@ func main() {
 	if msgcachesize >= 0 {
 		MSGCACHESIZE = int(msgcachesize)
 	}
-	MSGCACHE = make([]string, MSGCACHESIZE)
+	MSGCACHE = make([]cachedEvent, 0, MSGCACHESIZE)
 
 	if processes <= 0 {
 		processes = int64(runtime.NumCPU())
@@ -215,7 +216,13 @@ func main() {
 			return
 		}
 
-		newConnection(ws, user, ip)
+		// id of the last event the client received, to replay what it missed
+		since, err := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
+		if err != nil || since < 0 {
+			since = 0
+		}
+
+		newConnection(ws, user, ip, since)
 	})
 
 	fmt.Printf("Using %v threads, and listening on: %v\n", processes, addr)

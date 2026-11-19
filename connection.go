@@ -35,6 +35,7 @@ type Connection struct {
 	stop           chan bool
 	user           *User
 	ping           chan time.Time
+	since          int64 // replay cached events after this id on register
 	sync.RWMutex
 }
 
@@ -93,7 +94,7 @@ type PrivmsgOut struct {
 }
 
 // Create a new connection using the specified socket and router.
-func newConnection(s *websocket.Conn, user *User, ip string) {
+func newConnection(s *websocket.Conn, user *User, ip string, since int64) {
 	c := &Connection{
 		socket:         s,
 		ip:             ip,
@@ -104,6 +105,7 @@ func newConnection(s *websocket.Conn, user *User, ip string) {
 		stop:           make(chan bool),
 		user:           user,
 		ping:           make(chan time.Time, 2),
+		since:          since,
 		RWMutex:        sync.RWMutex{},
 	}
 
