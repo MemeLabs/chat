@@ -11,18 +11,18 @@ import (
 	"encoding/json"
 	_ "expvar"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
-	conf "github.com/msbranco/goconfig"
+	"gopkg.in/ini.v1"
 )
 
 type State struct {
@@ -63,50 +63,53 @@ var (
 )
 
 func main() {
-	c, err := conf.ReadConfigFile("settings.cfg")
+	c, err := ini.LoadSources(iniOptions, "settings.cfg")
 	if err != nil {
-		nc := conf.NewConfigFile()
-		nc.AddOption("default", "debug", "false")
-		nc.AddOption("default", "listenaddress", ":9998")
-		nc.AddOption("default", "maxprocesses", "0")
-		nc.AddOption("default", "chatdelay", fmt.Sprintf("%d", 300*time.Millisecond))
-		nc.AddOption("default", "maxthrottletime", fmt.Sprintf("%d", 5*time.Minute))
-		nc.AddOption("default", "dbfile", "chatbackend.sqlite")
-		nc.AddOption("default", "jwtcookiename", JWTCOOKIENAME)
-		nc.AddOption("default", "jwtsecret", "")
-		nc.AddOption("default", "apiuserid", "")
-		nc.AddOption("default", "usernameapi", USERNAMEAPI)
-		nc.AddOption("default", "viewerstateapi", VIEWERSTATEAPI)
-		nc.AddOption("default", "messagecachesize", "150")
-		nc.AddOption("default", "rarechance", strconv.FormatFloat(RARECHANCE, 'f', -1, 64))
-		nc.AddOption("default", "emotemanifest", EMOTEMANIFEST)
-		nc.AddOption("default", "initdb", "false")
+		nc := ini.Empty(iniOptions)
+		d := nc.Section("default")
+		d.Comment = "# ChatBackend"
+		d.NewKey("debug", "false")
+		d.NewKey("listenaddress", ":9998")
+		d.NewKey("maxprocesses", "0")
+		d.NewKey("chatdelay", fmt.Sprintf("%d", 300*time.Millisecond))
+		d.NewKey("maxthrottletime", fmt.Sprintf("%d", 5*time.Minute))
+		d.NewKey("dbfile", "chatbackend.sqlite")
+		d.NewKey("jwtcookiename", JWTCOOKIENAME)
+		d.NewKey("jwtsecret", "")
+		d.NewKey("apiuserid", "")
+		d.NewKey("usernameapi", USERNAMEAPI)
+		d.NewKey("viewerstateapi", VIEWERSTATEAPI)
+		d.NewKey("messagecachesize", "150")
+		d.NewKey("rarechance", strconv.FormatFloat(RARECHANCE, 'f', -1, 64))
+		d.NewKey("emotemanifest", EMOTEMANIFEST)
+		d.NewKey("initdb", "false")
 
-		if err = nc.WriteConfigFile("settings.cfg", 0644, "ChatBackend"); err != nil {
+		if err = writeConfigFile(nc, "settings.cfg"); err != nil {
 			log.Fatal("Unable to create settings.cfg: ", err)
 		}
-		if c, err = conf.ReadConfigFile("settings.cfg"); err != nil {
+		if c, err = ini.LoadSources(iniOptions, "settings.cfg"); err != nil {
 			log.Fatal("Unable to read settings.cfg: ", err)
 		}
 	}
+	cfg := c.Section("default")
 
-	debuggingenabled, _ = c.GetBool("default", "debug")
-	addr, _ := c.GetString("default", "listenaddress")
-	processes, _ := c.GetInt64("default", "maxprocesses")
-	delay, _ := c.GetInt64("default", "chatdelay")
-	maxthrottletime, _ := c.GetInt64("default", "maxthrottletime")
-	dbfile, _ := c.GetString("default", "dbfile")
-	initdb, _ := c.GetBool("default", "initdb")
+	debuggingenabled, _ = cfg.Key("debug").Bool()
+	addr := cfg.Key("listenaddress").String()
+	processes, _ := cfg.Key("maxprocesses").Int64()
+	delay, _ := cfg.Key("chatdelay").Int64()
+	maxthrottletime, _ := cfg.Key("maxthrottletime").Int64()
+	dbfile := cfg.Key("dbfile").String()
+	initdb, _ := cfg.Key("initdb").Bool()
 	DELAY = time.Duration(delay)
 	MAXTHROTTLETIME = time.Duration(maxthrottletime)
-	JWTSECRET, _ = c.GetString("default", "jwtsecret")
-	JWTCOOKIENAME, _ = c.GetString("default", "jwtcookiename")
-	APIUSERID, _ = c.GetString("default", "apiuserid")
-	USERNAMEAPI, _ = c.GetString("default", "usernameapi")
-	VIEWERSTATEAPI, _ = c.GetString("default", "viewerstateapi")
-	msgcachesize, _ := c.GetInt64("default", "messagecachesize")
-	RARECHANCE, _ = c.GetFloat("default", "rarechance")
-	EMOTEMANIFEST, _ = c.GetString("default", "emotemanifest")
+	JWTSECRET = cfg.Key("jwtsecret").String()
+	JWTCOOKIENAME = cfg.Key("jwtcookiename").String()
+	APIUSERID = cfg.Key("apiuserid").String()
+	USERNAMEAPI = cfg.Key("usernameapi").String()
+	VIEWERSTATEAPI = cfg.Key("viewerstateapi").String()
+	msgcachesize, _ := cfg.Key("messagecachesize").Int64()
+	RARECHANCE, _ = cfg.Key("rarechance").Float64()
+	EMOTEMANIFEST = cfg.Key("emotemanifest").String()
 
 	if JWTSECRET == "" {
 		JWTSECRET = "PepoThink"
@@ -261,7 +264,7 @@ func (s *State) load() {
 	s.Lock()
 	defer s.Unlock()
 
-	b, err := ioutil.ReadFile(".state.dc")
+	b, err := os.ReadFile(".state.dc")
 	if err != nil {
 		D("Error while reading from states file", err)
 		return
@@ -291,10 +294,25 @@ func (s *State) save() {
 		D("Error encoding submode:", err)
 	}
 
-	err = ioutil.WriteFile(".state.dc", mb.Bytes(), 0600)
+	err = os.WriteFile(".state.dc", mb.Bytes(), 0600)
 	if err != nil {
 		D("Error with writing out state file:", err)
 	}
+}
+
+// iniOptions match the old goconfig parsing: option names are
+// case-insensitive and values are never truncated at '#' or ';'.
+var iniOptions = ini.LoadOptions{Insensitive: true, IgnoreInlineComment: true}
+
+func writeConfigFile(f *ini.File, path string) error {
+	// "default" is ini's implicit section; keep the explicit [default] header
+	// that existing config files use.
+	ini.DefaultHeader = true
+	var buf bytes.Buffer
+	if _, err := f.WriteTo(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
 func createAPIJWT(userID string) (string, error) {

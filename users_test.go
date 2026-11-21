@@ -2,6 +2,9 @@ package main
 
 import (
 	"testing"
+	"time"
+
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 func init() {
@@ -113,5 +116,59 @@ func TestFeatures(t *testing.T) {
 	}
 	if !u.isModerator() {
 		t.Error("should be moderator")
+	}
+}
+
+func TestParseJwt(t *testing.T) {
+	oldSecret := JWTSECRET
+	JWTSECRET = "test-secret"
+	defer func() { JWTSECRET = oldSecret }()
+
+	const id = "75362df9-9319-4cd2-991a-fab94a9f544a"
+
+	sign := func(method jwt.SigningMethod, key any, claims jwt.MapClaims) string {
+		t.Helper()
+		s, err := jwt.NewWithClaims(method, claims).SignedString(key)
+		if err != nil {
+			t.Fatalf("signing token: %v", err)
+		}
+		return s
+	}
+
+	t.Run("round trip", func(t *testing.T) {
+		token, err := createAPIJWT(id)
+		if err != nil {
+			t.Fatalf("createAPIJWT: %v", err)
+		}
+		claims, err := parseJwt(token)
+		if err != nil {
+			t.Fatalf("parseJwt: %v", err)
+		}
+		if claims.UserId != id {
+			t.Errorf("UserId = %q, want %q", claims.UserId, id)
+		}
+	})
+
+	invalid := map[string]string{
+		"wrong secret": sign(jwt.SigningMethodHS256, []byte("other-secret"), jwt.MapClaims{
+			"id":  id,
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}),
+		"expired": sign(jwt.SigningMethodHS256, []byte(JWTSECRET), jwt.MapClaims{
+			"id":  id,
+			"exp": time.Now().Add(-time.Minute).Unix(),
+		}),
+		"alg none": sign(jwt.SigningMethodNone, jwt.UnsafeAllowNoneSignatureType, jwt.MapClaims{
+			"id":  id,
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}),
+		"garbage": "not.a.jwt",
+	}
+	for name, token := range invalid {
+		t.Run(name, func(t *testing.T) {
+			if claims, err := parseJwt(token); err == nil {
+				t.Errorf("parseJwt accepted invalid token, claims = %+v", claims)
+			}
+		})
 	}
 }

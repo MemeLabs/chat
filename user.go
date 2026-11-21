@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 type userTools struct {
@@ -88,21 +88,17 @@ type User struct {
 
 type UserClaims struct {
 	UserId string `json:"id"` // TODO from rustla2 backend impl
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // TODO
 func parseJwt(cookie string) (*UserClaims, error) {
-	// verify jwt cookie - https://godoc.org/github.com/dgrijalva/jwt-go#example-Parse--Hmac
-	token, err := jwt.ParseWithClaims(cookie, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+	// verify jwt cookie - https://pkg.go.dev/github.com/golang-jwt/jwt/v5#example-Parse-Hmac
+	token, err := jwt.ParseWithClaims(cookie, &UserClaims{}, func(token *jwt.Token) (any, error) {
 		return []byte(JWTSECRET), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}))
 	if err != nil {
 		return nil, errors.New("Token invalid")
-	}
-
-	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-		return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 	}
 
 	claims, ok := token.Claims.(*UserClaims) // TODO
@@ -135,7 +131,7 @@ func userFromAPI(uuid string) (username string, err error) {
 		return "", err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("err2", err)
 		return "", err

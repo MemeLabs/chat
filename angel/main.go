@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	conf "github.com/msbranco/goconfig"
+	"gopkg.in/ini.v1"
 )
 
 var debuggingenabled bool
@@ -32,27 +33,45 @@ var (
 	namesrunning = false
 )
 
-func main() {
-	c, err := conf.ReadConfigFile("angel.cfg")
-	if err != nil {
-		nc := conf.NewConfigFile()
-		nc.AddOption("default", "debug", "false")
-		nc.AddOption("default", "binarypath", "./")
-		nc.AddOption("default", "serverurl", "ws://localhost:9998/ws")
-		nc.AddOption("default", "origin", "http://localhost")
+// iniOptions match the old goconfig parsing: option names are
+// case-insensitive and values are never truncated at '#' or ';'.
+var iniOptions = ini.LoadOptions{Insensitive: true, IgnoreInlineComment: true}
 
-		if err := nc.WriteConfigFile("angel.cfg", 0644, "Chat Angel, watching over the chat and restarting it as needed"); err != nil {
+func writeConfigFile(f *ini.File, path string) error {
+	// "default" is ini's implicit section; keep the explicit [default] header
+	// that existing config files use.
+	ini.DefaultHeader = true
+	var buf bytes.Buffer
+	if _, err := f.WriteTo(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0644)
+}
+
+func main() {
+	c, err := ini.LoadSources(iniOptions, "angel.cfg")
+	if err != nil {
+		nc := ini.Empty(iniOptions)
+		d := nc.Section("default")
+		d.Comment = "# Chat Angel, watching over the chat and restarting it as needed"
+		d.NewKey("debug", "false")
+		d.NewKey("binarypath", "./")
+		d.NewKey("serverurl", "ws://localhost:9998/ws")
+		d.NewKey("origin", "http://localhost")
+
+		if err := writeConfigFile(nc, "angel.cfg"); err != nil {
 			log.Fatal("Unable to create angel.cfg: ", err)
 		}
-		if c, err = conf.ReadConfigFile("angel.cfg"); err != nil {
+		if c, err = ini.LoadSources(iniOptions, "angel.cfg"); err != nil {
 			log.Fatal("Unable to read angel.cfg: ", err)
 		}
 	}
+	cfg := c.Section("default")
 
-	debuggingenabled, _ = c.GetBool("default", "debug")
-	binpath, _ := c.GetString("default", "binarypath")
-	serverurl, _ := c.GetString("default", "serverurl")
-	origin, _ := c.GetString("default", "origin")
+	debuggingenabled, _ = cfg.Key("debug").Bool()
+	binpath := cfg.Key("binarypath").String()
+	serverurl := cfg.Key("serverurl").String()
+	origin := cfg.Key("origin").String()
 	initLog()
 	headers.Set("Origin", origin)
 
