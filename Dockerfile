@@ -1,10 +1,9 @@
-FROM golang:alpine AS builder
+FROM golang:1.27-alpine AS builder
 RUN apk --no-cache add \
   ca-certificates \
   build-base
 
-ENV GO111MODULE=on \
-    CGO_ENABLED=1
+ENV CGO_ENABLED=1
 
 WORKDIR /build
 

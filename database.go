@@ -2,17 +2,16 @@ package main
 
 import (
 	"database/sql"
-	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type database struct {
-	db        *sqlx.DB
+	db        *sql.DB
 	insertban chan *dbInsertBan
 	deleteban chan *dbDeleteBan
 	sync.Mutex
@@ -38,14 +37,22 @@ var db = &database{
 }
 
 func initDatabase(dbfile string, init bool) {
-	db.db = sqlx.MustConnect("sqlite3", dbfile)
+	conn, err := sql.Open("sqlite3", dbfile)
+	if err == nil {
+		err = conn.Ping()
+	}
+	if err != nil {
+		panic(err)
+	}
+	db.db = conn
+
 	if init {
-		sql, err := ioutil.ReadFile("db-init.sql")
+		query, err := os.ReadFile("db-init.sql")
 		if err != nil {
 			panic(err)
 		}
 
-		stmt, err := db.db.Prepare(string(sql))
+		stmt, err := db.db.Prepare(string(query))
 		if err != nil {
 			panic(err)
 		}
@@ -59,14 +66,14 @@ func initDatabase(dbfile string, init bool) {
 	go db.runDeleteBan()
 }
 
-func (db *database) getStatement(name string, sql string) *sql.Stmt {
+func (db *database) getStatement(name string, query string) *sql.Stmt {
 	db.Lock()
-	stmt, err := db.db.Prepare(sql)
+	stmt, err := db.db.Prepare(query)
 	db.Unlock()
 	if err != nil {
 		D("Unable to create", name, "statement:", err)
 		time.Sleep(100 * time.Millisecond)
-		return db.getStatement(name, sql)
+		return db.getStatement(name, query)
 	}
 	return stmt
 }
